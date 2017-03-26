@@ -10,14 +10,27 @@ extern "C" {
 #include "common.h"
 
 #define MAX_NEWLINE_CALLBACK_COUNT 10
-#define WIFI_BUFF_SIZE 2048
-#define WIFI_LINE_BUFF_SIZE 2048
+#define WIFI_BUFF_SIZE 512
+#define WIFI_LINE_BUFF_SIZE 1024
+
+#define MAX_POINTS_COUNT 5
+#define MAX_PENDING_MESSAGES 100
+#define MAX_PENDING_MESSAGES_DATA 3
+#define MESSAGE_DATA_MAX_SIZE 1024
 
 typedef struct {
 	char name[20];
 } WIFI_Point;
 
-#define MAX_POINTS_COUNT 5
+typedef struct {
+	char line[WIFI_BUFF_SIZE];
+} message_command;
+
+typedef struct {
+	char line[MESSAGE_DATA_MAX_SIZE];
+	int  target;
+
+} message_data;
 
 
 void WIFI_Init();
@@ -37,7 +50,8 @@ int WIFI_Set_CWMODE(int mode);
 int WIFI_Set_CIPMUX(int mode);
 int WIFI_Set_CIPSERVER(int mode, int port);
 int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn);
-
+int WIFI_Read_Line_Sync(char* answer,uint8_t maxlen, int timeout);
+int WIFI_Read_Byte(uint16_t* ch, int timeout);
 extern int is_new_line;
 
 

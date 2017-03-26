@@ -9,6 +9,91 @@ int is_new_line=0;
 
 static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT];
 
+static message_command* message_queue[MAX_PENDING_MESSAGES];
+static int message_queue_count = 0;
+
+static message_data* message_data_queue[MAX_PENDING_MESSAGES_DATA];
+static int message_data_queue_count = 0;
+
+static int recv_message_data_started=0;
+
+
+static int recv_message_conn_id_readed=0;
+static char recv_message_conn_id_tmp[4] = {0};
+static int recv_message_conn_id =-1;
+static int recv_message_size=-1;
+static char recv_message_size_tmp[8] = {0};
+static int recv_message_size_cur_pos=0;
+static int recv_message_size_readed=0;
+static int recv_message_header_readed=0;
+static int recv_message_data_bytes_read=0;
+static char recv_message_buff[MESSAGE_DATA_MAX_SIZE] = {0};
+static int packed_bytes_readed=0;
+static int recv_message_conn_id_cur_pos=0;
+
+int message_data_queue_add(int conn_id, char* buff){
+	if(message_data_queue_count+1 > MAX_PENDING_MESSAGES_DATA){
+		Log_Message("Data message queue overloaded");
+		return 1; // TODO QUEUE overloaded notify
+	}
+
+	message_data* msg = malloc_c(sizeof(message_data));
+	strcpy(msg->line, buff);
+	msg->target = conn_id;
+
+	message_data_queue[message_data_queue_count++] = msg;
+	return 0;
+}
+
+message_data* message_data_queue_get(){
+	if( !message_data_queue_count ){
+			return NULL;
+		}
+
+	message_data* msg = message_data_queue[0];
+	int i=0;
+	for(i=0;i<message_data_queue_count;i++){
+		message_data_queue[0]= message_data_queue[1];
+	}
+
+	message_data_queue[i+1] = NULL;
+	message_data_queue_count--;
+	return msg;
+}
+
+int message_queue_add(char* buff){
+	if(message_queue_count+1 > MAX_PENDING_MESSAGES){
+		Log_Message("Message queue overloaded");
+		return 1; // TODO QUEUE overloaded notify
+	}
+
+	message_command* msg = malloc_c(sizeof(message_command));
+	strcpy(msg->line, buff);
+
+	message_queue[message_queue_count++] = msg;
+	return 0;
+}
+
+message_command* message_queue_get(){
+	if( !message_queue_count ){
+		return NULL;
+	}
+
+	if( message_queue_count > 100 ){
+		return NULL;
+	}
+
+	message_command* msg = message_queue[0];
+	int i=0;
+	for(i=0;i<message_queue_count;i++){
+		message_queue[0]= message_queue[1];
+	}
+
+	message_queue[i+1] = NULL;
+	message_queue_count--;
+	return msg;
+}
+
 void init_newline_callbacks(){
 	for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT;i++){
 		new_line_handlers[i] = NULL;
@@ -47,22 +132,137 @@ int wait_new_line(int timeout){
 	return is_new_line ? 0 : 1;
 }
 
+void TIM7_IRQHandler() {
+	if (TIM_GetITStatus(TIM7, TIM_IT_Update) != RESET) {
+		TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
+		message_command* msg = message_queue_get();
+		if( msg ){
+			for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
+				if (new_line_handlers[i] != NULL){
+					new_line_handlers[i](&msg->line);
+				}
+			}
+			free_c(msg);
+		}
+  }
+}
+
+int parse_ipd_packet(char cur_byte, int buff_pos) {
+	if( cur_byte == '+' && buff_pos==0 ) {
+		if( recv_message_data_started == 0) {
+			recv_message_data_started = 0;
+			recv_message_conn_id_readed=0;
+			recv_message_header_readed=0;
+			recv_message_data_started=1;
+			recv_message_size_readed = 0;
+			recv_message_data_bytes_read =0;
+			recv_message_size_cur_pos=0;
+			recv_message_conn_id_cur_pos=0;
+			packed_bytes_readed=0;
+		}
+		return 1;
+	}
+
+	if (!recv_message_data_started) {
+		return 0;
+	}
+
+	packed_bytes_readed++;
+
+	if( recv_message_header_readed == 0){ // IPD,
+		if(  packed_bytes_readed > 5 ) {
+			recv_message_data_started = 0;
+			Log_Message("Failed to read +IPD packet");
+			return 1;
+		}
+
+		if(cur_byte == ','){
+			recv_message_header_readed = 1;
+		}else{
+			//recv_message_header_tmp[strlen(recv_message_conn_id_tmp)] == wifi_buff[wifi_buff_pos];
+		}
+		return 1;
+	}
+
+	if( recv_message_header_readed && recv_message_conn_id_readed==0){ //IPD,10,
+		if(  packed_bytes_readed > 9 ) {
+			recv_message_data_started = 0;
+			Log_Message("Failed to read +IPD packet");
+			return 1;
+		}
+
+		if(cur_byte == ','){
+			recv_message_conn_id = atoi(recv_message_conn_id_tmp);
+			recv_message_conn_id_readed = 1;
+		} else {
+			recv_message_conn_id_tmp[recv_message_conn_id_cur_pos++] = cur_byte;
+		}
+
+		return 1;
+	}
+
+	if (recv_message_header_readed && recv_message_conn_id_readed && recv_message_size_readed == 0 ){ //IPD,10,1024:
+		if(  packed_bytes_readed > 14 ) {
+			recv_message_data_started = 0;
+			Log_Message("Failed to read +IPD packet");
+			return 1;
+		}
+		if(cur_byte == ':'){
+			recv_message_size = atoi(recv_message_size_tmp);
+			if(recv_message_size >= MESSAGE_DATA_MAX_SIZE){
+				recv_message_data_started = 0;
+				Log_Message("Message to long");
+				return 1;
+			}else {
+				recv_message_size_readed = 1;
+			}
+		} else {
+			recv_message_size_tmp[recv_message_size_cur_pos++] = cur_byte;
+		}
+
+		return 1;
+	}
+
+	if ( recv_message_header_readed && recv_message_conn_id_readed && recv_message_size_readed && packed_bytes_readed ){ //IPD,10,1024:[A-Z]{MESSAGE_DATA_MAX_SIZE}
+		if(  packed_bytes_readed > (MESSAGE_DATA_MAX_SIZE+14) ) {
+			recv_message_data_started = 0;
+			Log_Message("Failed to read +IPD packet");
+			return 1;
+		}
+
+		if ( recv_message_data_bytes_read < (recv_message_size-1)  ){
+			recv_message_buff[recv_message_data_bytes_read++] = cur_byte;
+		} else {
+			recv_message_data_started = 0;
+			message_data_queue_add(recv_message_conn_id, recv_message_buff);
+			Log_Message(recv_message_buff);
+			wifi_buff_pos=0;
+			return 0;
+			// message fully readed continue parse string
+		}
+
+		return 1;
+	}
+
+	recv_message_data_started=0;
+	Log_Message("Failed to read +IPD packet");
+	return 1;
+}
+
 void USART1_IRQHandler(void) {
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) == SET) {
 		USART_ClearITPendingBit(USART1, USART_IT_RXNE);
 
 		wifi_buff[wifi_buff_pos] = USART_ReceiveData(USART1);
 
-		if(wifi_buff[wifi_buff_pos] == '\n' ){
-			is_new_line = 1;
-			for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
-				if (new_line_handlers[i] != NULL){
-					new_line_handlers[i](&wifi_buff);
-				}
-			}
-
+		if( parse_ipd_packet(wifi_buff[wifi_buff_pos], wifi_buff_pos )) {
 			wifi_buff_pos=0;
-		}else{
+		} else if(wifi_buff[wifi_buff_pos] == '\n' ){
+			is_new_line = 1;
+			wifi_buff[wifi_buff_pos+1] = '\0';
+			message_queue_add(wifi_buff);
+			wifi_buff_pos=0;
+		} else {
 			wifi_buff_pos++;
 		}
 
@@ -114,6 +314,19 @@ void MY_USART_Init(){
 	NVIC_Init(&NVIC_InitStructure);
 
 	init_newline_callbacks();
+
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
+	TIM_TimeBaseInitTypeDef base_timer;
+	TIM_TimeBaseStructInit(&base_timer);
+
+	base_timer.TIM_Prescaler = 24000 - 1;
+	base_timer.TIM_Period = 1;
+	TIM_TimeBaseInit(TIM6, &base_timer);
+
+	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
+	TIM_Cmd(TIM7, ENABLE);
+
+	NVIC_EnableIRQ(TIM7_IRQn);
 
 	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
 }
@@ -174,13 +387,13 @@ int WIFI_Exec_Cmd_Get_Answer(char* cmd, char* answer){
 	return WIFI_Read_Line(answer,100, 800000);
 }
 
-
 int WIFI_Reset(){
 	char answer[100] = {0};
 	WIFI_Exec_Cmd_Get_Answer("AT+RST\r\n", answer);
 
 	return strcmp("OK\r\n\r", answer);
 }
+
 int WIFI_Test(){
 	char answer[100] = {0};
 	if (WIFI_Exec_Cmd_Get_Answer("AT\r\n", answer) != 0) {
@@ -472,7 +685,7 @@ int WIFI_TCP_Connect(char* host, int port) {
 	return 0;
 }
 
-int WIFI_TCP_Send(uint8_t conn_id,uint16_t* data, int bytes_count){
+int WIFI_TCP_Send(uint8_t conn_id, uint16_t* data, int bytes_count){
 	char answer[100] ={0};
 	uint16_t ch=0;
 	char command[20] = {0};
@@ -688,4 +901,3 @@ void WIFI_Init(){
 	}
 
 }
-
