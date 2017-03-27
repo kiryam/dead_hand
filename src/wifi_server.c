@@ -28,11 +28,9 @@ static int pending_connection_last_item = -1;
 static int pending_disconnection[MAX_PENDING_DISCONNECTION];
 static int pending_disconnection_last_item = -1;
 
-static char* pending_data[MAX_PENDING_DATA];
-static int pending_data_last_item = -1;
-
 int pending_connection_push(int conn_id){
 	if( pending_connection_last_item+1 > MAX_PENDING_CONNETION) {
+		Log_Message("Connection stack overflow");
 		return 1;
 	}
 
@@ -46,6 +44,7 @@ int pending_connection_pop() {
 
 int pending_disconnection_push(int conn_id){
 	if( pending_disconnection_last_item+1 > MAX_PENDING_DISCONNECTION ){
+		Log_Message("Disconnection stack overflow");
 		return 1;
 	}
 
@@ -57,31 +56,13 @@ int pending_disconnection_pop() {
 	return pending_disconnection_last_item < 0 ? -1 : pending_disconnection[pending_disconnection_last_item--];
 }
 
-int pending_data_push(char* buff){
-	if( pending_data_last_item+1 > MAX_PENDING_DATA ){
-		return 1;
-	}
-
-	char* data = malloc_c(sizeof(char)*(strlen(buff)+1));
-	strcpy(data, buff);
-	data[strlen(buff)+1] = '\0';
-
-	pending_data[++pending_data_last_item] = data;
-	return 0;
-}
-
-char* pending_data_pop() {
-	return pending_data_last_item < 0 ? NULL : pending_data[pending_data_last_item--];
-}
-
-
 void WIFI_Server_Timer_Init() {
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 500;
+	base_timer.TIM_Period = 100;
 	TIM_TimeBaseInit(TIM6, &base_timer);
 
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
@@ -94,18 +75,7 @@ void TIM6_DAC_IRQHandler() {
 	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
 
-		char* data = pending_data_pop();
-		if( data!= NULL ){
-			free_c(data);
-		}
-
-		int conn_id = pending_connection_pop();
-		if( conn_id >= 0 ){
-			//clients_count++;
-			func_wifi_server_on_connect(conn_id);
-		}
-
-		conn_id = pending_disconnection_pop();
+		int conn_id = pending_disconnection_pop();
 		if( conn_id >= 0 ){
 			clients_count--;
 		}
@@ -237,13 +207,11 @@ void WIFI_Server_Unregister(){
 }
 
 void render_wifi_server(){
-	//if( new_client != -1 ) {
-		//int client_id = new_client;
-		//new_client = -1;
-		//USART_ITConfig(USART1, USART_IT_RXNE, DISABLE);
-		//func_wifi_server_on_connect(client_id);
-		//USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
-	//}
+	int conn_id = pending_connection_pop();
+	if( conn_id >= 0 ){
+		//clients_count++;
+		func_wifi_server_on_connect(conn_id);
+	}
 
 	if (++dots>4){dots=0;}
 
