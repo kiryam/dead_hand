@@ -24,7 +24,6 @@ void func_connect(){
 	}
 }
 
-
 void func_parse_point(char* line){
 	WIFI_Point point;
 	if (WIFI_Parse_Point_Answer(line, &point) == 0 ){

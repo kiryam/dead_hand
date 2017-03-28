@@ -82,7 +82,7 @@ void TIM6_DAC_IRQHandler() {
   }
 }
 
-void fun_wifi_on_new_line(char* line){ // TODO not void
+void func_wifi_on_new_line(char* line){ // TODO not void
 	if (strncmp(&line[2], "CONNECT", 7) == 0) {
 		pending_connection_push(atoi(&line[0]));
 	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
@@ -96,34 +96,31 @@ void fun_wifi_on_new_line(char* line){ // TODO not void
 		strncpy(ch, line, 2);
 		pending_disconnection_push(atoi(ch));
 	}
+}
 
-	//pending_data_push("test");
-		/*	if (strncmp("GET /?password", answer, 14) == 0){
-					char param_str[512] = {0};
-					for(int i=0; i<sizeof(param_str); i++) {
-						if(answer[6+i] == ' '){
-							break;
-						}
-						param_str[i]=answer[6+i];
-					}
-
-					const char s[2] = "&";
-					char *token;
-					token = strtok(param_str, s);
-					while( token != NULL ) {
-						if (strncmp("password", token, 8) == 0){
-							config_set("password", &token[9]);
-						}
-						token = strtok(NULL, s);
-					}
-				}
-
-				char* password = config_get("password");
-				message="IPD OK";
-				new_client = conn_id;
+void func_wifi_ondata(message_data* msg){
+	if (strncmp("GET /?password", msg->line, 14) == 0){
+		char param_str[512] = {0};
+		for(int i=0; i<sizeof(param_str); i++) {
+			if(msg->line[6+i] == ' '){
+				break;
 			}
+			param_str[i]=msg->line[6+i];
 		}
-	*/
+
+		const char s[2] = "&";
+		char *token;
+		token = strtok(param_str, s);
+		while( token != NULL ) {
+			if (strncmp("password", token, 8) == 0){
+				config_set("password", &token[9]);
+			}
+			token = strtok(NULL, s);
+		}
+	}
+
+	char* password = config_get("password");
+	message="IPD OK";
 }
 
 void func_wifi_server_on_connect(int conn_id){
@@ -193,7 +190,8 @@ void WIFI_Server_Init(){
 
 	message = "";
 	if ( WIFI_Server_Start(8888) == 0 ) {
-		add_newline_callback(fun_wifi_on_new_line);
+		add_newline_callback(func_wifi_on_new_line);
+		add_data_callback(func_wifi_ondata);
 
 		server_status = 1;
 		message = "Listening";
@@ -203,7 +201,8 @@ void WIFI_Server_Init(){
 }
 
 void WIFI_Server_Unregister(){
-	remove_newline_callback(fun_wifi_on_new_line);
+	remove_newline_callback(func_wifi_on_new_line);
+	remove_data_callback(func_wifi_ondata);
 }
 
 void render_wifi_server(){

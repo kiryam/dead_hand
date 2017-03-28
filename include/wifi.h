@@ -10,6 +10,7 @@ extern "C" {
 #include "common.h"
 
 #define MAX_NEWLINE_CALLBACK_COUNT 10
+#define MAX_DATA_CALLBACK_COUNT 5
 #define WIFI_BUFF_SIZE 512
 #define WIFI_LINE_BUFF_SIZE 1024
 
@@ -17,6 +18,7 @@ extern "C" {
 #define MAX_PENDING_MESSAGES 100
 #define MAX_PENDING_MESSAGES_DATA 3
 #define MESSAGE_DATA_MAX_SIZE 1024
+
 
 typedef struct {
 	char name[20];

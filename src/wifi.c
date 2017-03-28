@@ -8,7 +8,8 @@ static int wifi_buff_pos=0;
 int is_new_line=0;
 int is_welcome_byte=0;
 
-static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT];
+static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT] = {0};
+static callback data_handlers[MAX_DATA_CALLBACK_COUNT] = {0};
 
 static message_command* message_queue[MAX_PENDING_MESSAGES];
 static int message_queue_count = 0;
@@ -17,7 +18,6 @@ static message_data* message_data_queue[MAX_PENDING_MESSAGES_DATA];
 static int message_data_queue_count = 0;
 
 static int recv_message_data_started=0;
-
 
 static int recv_message_conn_id_readed=0;
 static char recv_message_conn_id_tmp[4] = {0};
@@ -95,11 +95,12 @@ message_command* message_queue_get(){
 	return msg;
 }
 
+/*
 void init_newline_callbacks(){
 	for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT;i++){
 		new_line_handlers[i] = NULL;
 	}
-}
+}*/
 
 int add_newline_callback(callback f){
 	for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
@@ -122,6 +123,29 @@ int remove_newline_callback(callback f){
 
 	return 1;
 }
+
+int add_data_callback(callback f){
+	for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
+		if (data_handlers[i] == NULL){
+			data_handlers[i] = f;
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+int remove_data_callback(callback f){
+	for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
+		if (data_handlers[i] == f){
+			data_handlers[i] = NULL;
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
 
 int wait_welcome_byte(int timeout){
 	while ( timeout > 0){
@@ -155,48 +179,28 @@ void TIM7_IRQHandler() {
 			}
 			free_c(msg);
 		}
+
+		message_data* msg_data = message_data_queue_get();
+		if( msg_data ){
+			for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
+				if (data_handlers[i] != NULL){
+					data_handlers[i](msg_data);
+				}
+			}
+			free_c(msg_data);
+		}
   }
 }
 
-int parse_ipd_packet(char cur_byte, int buff_pos) {
-	if( cur_byte == '+' && buff_pos==0 ) {
-		if( recv_message_data_started == 0) {
-			recv_message_data_started = 0;
-			recv_message_conn_id_readed=0;
-			recv_message_header_readed=0;
-			recv_message_data_started=1;
-			recv_message_size_readed = 0;
-			recv_message_data_bytes_read =0;
-			recv_message_size_cur_pos=0;
-			recv_message_conn_id_cur_pos=0;
-			packed_bytes_readed=0;
-		}
-		return 1;
-	}
-
+int parse_ipd_packet(char cur_byte) {
 	if (!recv_message_data_started) {
 		return 0;
 	}
 
 	packed_bytes_readed++;
 
-	if( recv_message_header_readed == 0){ // IPD,
+	if( recv_message_conn_id_readed==0){ //IPD,10,
 		if(  packed_bytes_readed > 5 ) {
-			recv_message_data_started = 0;
-			Log_Message("Failed to read +IPD packet");
-			return 1;
-		}
-
-		if(cur_byte == ','){
-			recv_message_header_readed = 1;
-		}else{
-			//recv_message_header_tmp[strlen(recv_message_conn_id_tmp)] == wifi_buff[wifi_buff_pos];
-		}
-		return 1;
-	}
-
-	if( recv_message_header_readed && recv_message_conn_id_readed==0){ //IPD,10,
-		if(  packed_bytes_readed > 9 ) {
 			recv_message_data_started = 0;
 			Log_Message("Failed to read +IPD packet");
 			return 1;
@@ -212,8 +216,8 @@ int parse_ipd_packet(char cur_byte, int buff_pos) {
 		return 1;
 	}
 
-	if (recv_message_header_readed && recv_message_conn_id_readed && recv_message_size_readed == 0 ){ //IPD,10,1024:
-		if(  packed_bytes_readed > 14 ) {
+	if ( recv_message_conn_id_readed && recv_message_size_readed == 0 ){ //IPD,10,1024:
+		if(  packed_bytes_readed > 10 ) {
 			recv_message_data_started = 0;
 			Log_Message("Failed to read +IPD packet");
 			return 1;
@@ -234,8 +238,8 @@ int parse_ipd_packet(char cur_byte, int buff_pos) {
 		return 1;
 	}
 
-	if ( recv_message_header_readed && recv_message_conn_id_readed && recv_message_size_readed && packed_bytes_readed ){ //IPD,10,1024:[A-Z]{MESSAGE_DATA_MAX_SIZE}
-		if(  packed_bytes_readed > (MESSAGE_DATA_MAX_SIZE+14) ) {
+	if ( recv_message_conn_id_readed && recv_message_size_readed && packed_bytes_readed ){ //IPD,10,1024:[A-Z]{MESSAGE_DATA_MAX_SIZE}
+		if(  packed_bytes_readed > (MESSAGE_DATA_MAX_SIZE+10) ) {
 			recv_message_data_started = 0;
 			Log_Message("Failed to read +IPD packet");
 			return 1;
@@ -266,10 +270,9 @@ void USART1_IRQHandler(void) {
 
 		wifi_buff[wifi_buff_pos] = USART_ReceiveData(USART1);
 
-		// TODO +CWLAP
 		if( wifi_buff_pos ==0 && wifi_buff[wifi_buff_pos] == '>' ){
 			is_welcome_byte = 1;
-		}else if( parse_ipd_packet(wifi_buff[wifi_buff_pos], wifi_buff_pos )) {
+		} else if( parse_ipd_packet(wifi_buff[wifi_buff_pos] ) ) {
 			wifi_buff_pos=0;
 		} else if(wifi_buff[wifi_buff_pos] == '\n' ){
 			is_new_line = 1;
@@ -282,6 +285,19 @@ void USART1_IRQHandler(void) {
 
 		if ( wifi_buff_pos >= WIFI_BUFF_SIZE ){
 			wifi_buff_pos = 0;
+		}
+
+		if( strncmp(wifi_buff, "+IPD,", 5) == 0 ){
+			if( recv_message_data_started == 0) {
+				recv_message_data_started=1;
+				recv_message_conn_id_readed=0;
+				recv_message_header_readed=0;
+				recv_message_size_readed = 0;
+				recv_message_data_bytes_read =0;
+				recv_message_size_cur_pos=0;
+				recv_message_conn_id_cur_pos=0;
+				packed_bytes_readed=0;
+			}
 		}
 	}
 }
@@ -327,7 +343,7 @@ void MY_USART_Init(){
 	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure);
 
-	init_newline_callbacks();
+	//init_newline_callbacks();
 
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
