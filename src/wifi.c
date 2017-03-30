@@ -752,7 +752,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint16_t* data, int bytes_count){
 
 	WIFI_Read_Line(answer, 100, 200000);
 	WIFI_Read_Line(answer, 100, 200000); // /r/n
-	WIFI_Read_Line(answer, 100, 400000);
+	WIFI_Read_Line(answer, 100, 800000);
 	if (strncmp(answer, "SEND OK", 6) != 0) {
 		Log_Message("Send not ok");
 		return 1;
