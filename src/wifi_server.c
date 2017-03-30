@@ -1,5 +1,6 @@
 #include "wifi_server.h"
 #include "menu_wifi.h"
+#include "wifi.h"
 
 #define FLASH_KEY1      ((uint32_t)0x45670123)
 #define FLASH_KEY2      ((uint32_t)0xCDEF89AB)
@@ -12,16 +13,56 @@ static uint8_t dots =0;
 static char buff[1024] = {0};
 static int clients_count=0;
 
-static int new_client = -1;
+typedef struct {
+	int connect_id;
+} connect_item;
 
-/*
+#define MAX_PENDING_CONNETION 10
+#define MAX_PENDING_DISCONNECTION 10
+#define MAX_PENDING_DATA 10
+#define MAX_DATA_SIZE 1024
+
+static int pending_connection[MAX_PENDING_CONNETION];
+static int pending_connection_last_item = -1;
+
+static int pending_disconnection[MAX_PENDING_DISCONNECTION];
+static int pending_disconnection_last_item = -1;
+
+int pending_connection_push(int conn_id){
+	if( pending_connection_last_item+1 > MAX_PENDING_CONNETION) {
+		Log_Message("Connection stack overflow");
+		return 1;
+	}
+
+	pending_connection[++pending_connection_last_item] = conn_id;
+	return 0;
+}
+
+int pending_connection_pop() {
+	return pending_connection_last_item < 0 ? -1 : pending_connection[pending_connection_last_item--];
+}
+
+int pending_disconnection_push(int conn_id){
+	if( pending_disconnection_last_item+1 > MAX_PENDING_DISCONNECTION ){
+		Log_Message("Disconnection stack overflow");
+		return 1;
+	}
+
+	pending_disconnection[++pending_disconnection_last_item] = conn_id;
+	return 0;
+}
+
+int pending_disconnection_pop() {
+	return pending_disconnection_last_item < 0 ? -1 : pending_disconnection[pending_disconnection_last_item--];
+}
+
 void WIFI_Server_Timer_Init() {
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 500;
+	base_timer.TIM_Period = 100;
 	TIM_TimeBaseInit(TIM6, &base_timer);
 
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
@@ -33,77 +74,53 @@ void WIFI_Server_Timer_Init() {
 void TIM6_DAC_IRQHandler() {
 	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
-		//GPIO_Write(GPIOC, GPIO_ReadOutputData(GPIOC) ^ (BLUE_LED | GREEN_LED));
+
+		int conn_id = pending_disconnection_pop();
+		if( conn_id >= 0 ){
+			clients_count--;
+		}
   }
 }
-*/
 
-void fun_wifi_on_new_line(char* line){ // TODO not void
-	if (strncmp(&line[2], "CONNECT", 7) == 0 || strncmp(&line[3], "CONNECT", 7) == 0){
-		char answer[2048] = {0};
-		if ( WIFI_Read_Line_Sync(answer, 100, 800000) == 0){
-			for(int i=0; i<5;i++){
-				if( WIFI_Read_Byte(&answer[i], 200000) ){
-					// TODO ERROR Handling
-				}
+void func_wifi_on_new_line(char* line){ // TODO not void
+	if (strncmp(&line[2], "CONNECT", 7) == 0) {
+		pending_connection_push(atoi(&line[0]));
+	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
+		char ch[3]={0};
+		strncpy(ch, line, 2);
+		pending_connection_push(atoi(ch));
+	} else if (strncmp(&line[2], "CLOSED", 6) == 0) {
+		pending_disconnection_push(atoi(&line[0]));
+	} else if(strncmp(&line[3], "CLOSED", 6) == 0 ){
+		char ch[3]={0};
+		strncpy(ch, line, 2);
+		pending_disconnection_push(atoi(ch));
+	}
+}
+
+void func_wifi_ondata(message_data* msg){
+	if (strncmp("GET /?password", msg->line, 14) == 0){
+		char param_str[512] = {0};
+		for(int i=0; i<sizeof(param_str); i++) {
+			if(msg->line[6+i] == ' '){
+				break;
 			}
-
-			if( strncmp("+IPD", answer, 4) == 0 ){
-				int meta_estimated = 10;
-				int conn_id = 0;
-				for( int i=0; i<meta_estimated; i++){
-					WIFI_Read_Byte(&answer[i], 400000);
-					if( answer[i] == ',' ){
-						answer[i] = '\0';
-						conn_id = atoi(answer);
-						i=-1;
-					}
-
-					if( answer[i] == ':' ){
-						answer[i] = '\0';
-						meta_estimated = 0;
-					}
-				}
-
-				int size_estimated = atoi(answer);
-				for(int i=0; i<size_estimated;i++){
-					WIFI_Read_Byte(&answer[i], 400000);
-				}
-
-
-				if (strncmp("GET /?password", answer, 14) == 0){
-					char param_str[512] = {0};
-					for(int i=0; i<sizeof(param_str); i++) {
-						if(answer[6+i] == ' '){
-							break;
-						}
-						param_str[i]=answer[6+i];
-					}
-
-					const char s[2] = "&";
-					char *token;
-					token = strtok(param_str, s);
-					while( token != NULL ) {
-						if (strncmp("password", token, 8) == 0){
-							config_set("password", &token[9]);
-						}
-						token = strtok(NULL, s);
-					}
-				}
-
-				char* password = config_get("password");
-				message="IPD OK";
-				new_client = conn_id;
-			}
+			param_str[i]=msg->line[6+i];
 		}
 
-	} else if (strncmp(&line[2], "CLOSED", 6) == 0 || strncmp(&line[3], "CLOSED", 6) == 0){
-		message="closed";
-		clients_count--;
-	}else{
-		strcpy(message, line);
-		//message = "err";
+		const char s[2] = "&";
+		char *token;
+		token = strtok(param_str, s);
+		while( token != NULL ) {
+			if (strncmp("password", token, 8) == 0){
+				config_set("password", &token[9]);
+			}
+			token = strtok(NULL, s);
+		}
 	}
+
+	char* password = config_get("password");
+	message="IPD OK";
 }
 
 void func_wifi_server_on_connect(int conn_id){
@@ -142,7 +159,7 @@ void func_wifi_server_on_data(){
 }
 
 void WIFI_Server_Init(){
-	//WIFI_Server_Time_Init();
+	WIFI_Server_Timer_Init();
 	//if( WIFI_Disconnect() != 0 ){
 	//	message="Filed to disconnect";
 	//	return;
@@ -173,7 +190,8 @@ void WIFI_Server_Init(){
 
 	message = "";
 	if ( WIFI_Server_Start(8888) == 0 ) {
-		add_newline_callback(fun_wifi_on_new_line);
+		add_newline_callback(func_wifi_on_new_line);
+		add_data_callback(func_wifi_ondata);
 
 		server_status = 1;
 		message = "Listening";
@@ -183,16 +201,15 @@ void WIFI_Server_Init(){
 }
 
 void WIFI_Server_Unregister(){
-	remove_newline_callback(fun_wifi_on_new_line);
+	remove_newline_callback(func_wifi_on_new_line);
+	remove_data_callback(func_wifi_ondata);
 }
 
 void render_wifi_server(){
-	if( new_client != -1 ) {
-		int client_id = new_client;
-		new_client = -1;
-		USART_ITConfig(USART1, USART_IT_RXNE, DISABLE);
-		func_wifi_server_on_connect(client_id);
-		USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
+	int conn_id = pending_connection_pop();
+	if( conn_id >= 0 ){
+		//clients_count++;
+		func_wifi_server_on_connect(conn_id);
 	}
 
 	if (++dots>4){dots=0;}
