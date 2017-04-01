@@ -57,32 +57,39 @@ int pending_disconnection_pop() {
 }
 
 void WIFI_Server_Timer_Init() {
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
 	base_timer.TIM_Period = 100;
-	TIM_TimeBaseInit(TIM6, &base_timer);
 
-	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
-	TIM_Cmd(TIM6, ENABLE);
+	TIM_TimeBaseInit(TIM7, &base_timer);
 
-	NVIC_EnableIRQ(TIM6_DAC_IRQn);
+	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
+	TIM_Cmd(TIM7, ENABLE);
+	NVIC_EnableIRQ(TIM7_IRQn);
 }
 
-void TIM6_DAC_IRQHandler() {
-	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
-		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
+void TIM7_IRQHandler() {
+	if (TIM_GetITStatus(TIM7, TIM_IT_Update) != RESET) {
+		TIM_ClearITPendingBit(TIM7, TIM_IT_Update);
 
 		int conn_id = pending_disconnection_pop();
 		if( conn_id >= 0 ){
 			clients_count--;
 		}
+
+		conn_id = pending_connection_pop();
+		if( conn_id >= 0 ){
+			func_wifi_server_on_connect(conn_id);
+		}
+
+
   }
 }
 
-void handler_index(Request* request,  char* response) {
+void handler_index(Request* request,  uint8_t* response) {
 	Log_Message("index");
 
 	char *page = "<html><head><title>Dead hand configure</title></head><body><h1>Set connection</h1><form action=\"/set_passwd\">Password: <input name=\"password\" /><br /><input type=\"submit\" value=\"Connect\" /></form></body></html>";
@@ -102,6 +109,17 @@ void handler_set_password(Request* request, char* response){
 	}
 
 	sprintf(response, "Password set to %s", config_get("password"));
+}
+
+void handler_get_protocol_log(Request* request, uint8_t* response){
+	Log_Message("Get protocol log");
+	strcpy(response, get_protocol_log());
+}
+
+
+void handler_memory(Request* request, uint8_t* response){
+	Log_Message("Memory");
+	sprintf(response, "Allocated memory: %d", get_memory_allocated_total());
 }
 
 void func_wifi_on_new_line(char* line){ // TODO not void
@@ -198,6 +216,7 @@ int parse_request(Request* request, char* raw_header){
 			path_cur = 0;
 
 			if(ptr[0] == '\r'){
+				request->headers_count = header_parsed;
 				header_parsed_done = 1;
 			}
 		}
@@ -209,39 +228,72 @@ int parse_request(Request* request, char* raw_header){
 }
 
 void func_wifi_ondata(message_data* msg){
+
 	Request request;
 	request.path[0] = '\0';
 	request.proto[0] = '\0';
 
-	memset((Request_Header*)request.headers, NULL, sizeof(Request_Header*) * REQUEST_MAX_HEADER_COUNT);
+	//memset((Request_Header*)request.headers, NULL, sizeof(Request_Header*) * REQUEST_MAX_HEADER_COUNT);
 
 	if( parse_request(&request, msg->line) != 0){
 		Log_Message("Parse header error");
+		return;
 	}
 
-	char response[RESPONSE_MAX_LEN] = {0};
+	uint8_t response[RESPONSE_MAX_LEN] = {0};
 	if( strncmp("/set_passwd", request.path, 11) == 0 ){
 		handler_set_password(&request, response);
-	}else{
+	} else if(strncmp("/get_protocol_log", request.path, 18) ==0){
+		handler_get_protocol_log(&request, response);
+	} else if(strncmp("/memory", request.path, 7) ==0){
+		handler_memory(&request, response);
+	} else {
 		handler_index(&request, response);
 	}
 
-	for(int i=0;i<REQUEST_MAX_HEADER_COUNT;i++){
-		if(request.headers[i] != NULL){
-			free_c(request.headers[i]);
-			request.headers[i] = NULL;
-		}
+	for(int i=0;i<request.headers_count;i++){
+		free_c(request.headers[i]);
 	}
 
-	char welcome[1024]="HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: ";
-	itoa(strlen(response), &welcome[strlen(welcome)], 10);
-	strcat(welcome, "\r\nConnection: Closed\r\n\n");
-	strcat(welcome, response);
+	int resonse_len = strlen(response);
+	uint8_t welcome[512] = {0};
+
+	sprintf(welcome, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\n\r\n", resonse_len);
 
 	if (WIFI_TCP_Send(msg->target, welcome, strlen(welcome)) != 0 ){
 		message="Failed to send";
 		return;
 	}
+
+	//return;
+
+
+
+
+	int bytes_pending = resonse_len;
+	uint8_t* response_ptr = response;
+
+#define MAX_PACKET_LEN 256
+
+	uint8_t tmp_buff[MAX_PACKET_LEN+1] ={0};
+	while (bytes_pending){
+		if( bytes_pending > MAX_PACKET_LEN ){
+			strncpy(tmp_buff, response_ptr, MAX_PACKET_LEN);
+			if (WIFI_TCP_Send(msg->target, tmp_buff, MAX_PACKET_LEN) != 0 ){
+				message="Failed to send";
+			}
+			response_ptr = &response_ptr[MAX_PACKET_LEN];
+			bytes_pending -= MAX_PACKET_LEN;
+		} else {
+			if (WIFI_TCP_Send(msg->target, response_ptr, bytes_pending) != 0 ){
+				message="Failed to send";
+			}
+			bytes_pending=0;
+		}
+	}
+
+
+
 }
 
 void func_wifi_server_on_connect(int conn_id){
@@ -318,12 +370,6 @@ void WIFI_Server_Unregister(){
 }
 
 void render_wifi_server(){
-	int conn_id = pending_connection_pop();
-	if( conn_id >= 0 ){
-		//clients_count++;
-		func_wifi_server_on_connect(conn_id);
-	}
-
 	if (++dots>4){dots=0;}
 
 	SSD1306_Fill(SSD1306_COLOR_BLACK);
@@ -334,18 +380,12 @@ void render_wifi_server(){
 		SSD1306_Puts(".", &Font_7x10, SSD1306_COLOR_WHITE);
 	}
 
-
 	SSD1306_GotoXY(0,12);
 	char clients_count_msg[17] = "Clients count: ";
 	itoa(clients_count, &clients_count_msg[15], 10);
 	SSD1306_Puts(clients_count_msg, &Font_7x10, SSD1306_COLOR_WHITE);
 
-
-	//SSD1306_GotoXY(0,24);
-	//SSD1306_Puts(server_buff, &Font_7x10, SSD1306_COLOR_WHITE);
-
 	SSD1306_UpdateScreen();
-
 };
 
 void controller_wifi_server(int btn){

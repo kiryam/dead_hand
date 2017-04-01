@@ -27,6 +27,7 @@ typedef struct {
 
 typedef struct {
 	uint8_t type;
+	int headers_count;
 	char path[REQUEST_MAX_PATH_LEN];
 	char proto[REQUEST_MAX_PROTO_LEN];
 	Request_Header* headers[REQUEST_MAX_HEADER_COUNT];

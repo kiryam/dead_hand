@@ -22,6 +22,8 @@ void sleepMs(unsigned int);
 _PTR malloc_c(size_t size);
 void free_c(_PTR);
 
+int get_memory_allocated_total();
+
 #ifdef __cplusplus
 }
 #endif

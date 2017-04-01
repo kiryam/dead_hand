@@ -11,11 +11,10 @@ extern "C" {
 
 #define MAX_NEWLINE_CALLBACK_COUNT 10
 #define MAX_DATA_CALLBACK_COUNT 5
-#define WIFI_BUFF_SIZE 512
-#define WIFI_LINE_BUFF_SIZE 1024
+#define WIFI_BUFF_SIZE 128
 
 #define MAX_POINTS_COUNT 5
-#define MAX_PENDING_MESSAGES 100
+#define MAX_PENDING_MESSAGES 200
 #define MAX_PENDING_MESSAGES_DATA 3
 #define MESSAGE_DATA_MAX_SIZE 1024
 
@@ -43,7 +42,7 @@ int WIFI_Get_Status();
 int WIFI_Disconnect();
 int WIFI_TCP_Connect(char* host, int port);
 int WIFI_TCP_Disconnect(uint8_t conn_id);
-int WIFI_TCP_Send(uint8_t conn_id, uint16_t* data, int bytes_count);
+int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count);
 int WIFI_TCP_Recv(uint8_t* response);
 int WIFI_Read_Char(char* ch, int timeout);
 int WIFI_Server_Start(int port);
