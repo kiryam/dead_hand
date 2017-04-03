@@ -9,29 +9,17 @@ extern "C" {
 #include "ssd1306.h"
 #include "common.h"
 
+#define ESP_DISABLE_ECHO
+
 #define MAX_NEWLINE_CALLBACK_COUNT 10
 #define MAX_DATA_CALLBACK_COUNT 5
-#define WIFI_BUFF_SIZE 128
 
 #define MAX_POINTS_COUNT 5
-#define MAX_PENDING_MESSAGES 200
-#define MAX_PENDING_MESSAGES_DATA 3
-#define MESSAGE_DATA_MAX_SIZE 1024
-
 
 typedef struct {
 	char name[20];
 } WIFI_Point;
 
-typedef struct {
-	char line[WIFI_BUFF_SIZE];
-} message_command;
-
-typedef struct {
-	char line[MESSAGE_DATA_MAX_SIZE];
-	int  target;
-
-} message_data;
 
 
 void WIFI_Init();

@@ -1,23 +1,17 @@
+#include <stdio.h>
 #include "wifi.h"
 #include "log.h"
-#include <stdio.h>
+#include "message_queue.h"
 
-#define ESP_DISABLE_ECHO
 
 int wifi_init_ok = 0;
-static char wifi_buff[WIFI_BUFF_SIZE] = {0};
+static char wifi_buff[MESSAGE_COMMAND_SIZE] = {0};
 static int wifi_buff_pos=0;
 int is_new_line=0;
 int is_welcome_byte=0;
 
 static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT] = {0};
 static callback data_handlers[MAX_DATA_CALLBACK_COUNT] = {0};
-
-static message_command* message_queue[MAX_PENDING_MESSAGES];
-static int message_queue_count = 0;
-
-static message_data* message_data_queue[MAX_PENDING_MESSAGES_DATA];
-static int message_data_queue_count = 0;
 
 static int recv_message_data_started=0;
 
@@ -49,68 +43,6 @@ void protocol_log_byte(uint16_t byte, uint8_t dir){
 
 char* get_protocol_log(){
 	return protocol_log;
-}
-
-int message_data_queue_add(int conn_id, char* buff){
-	if(message_data_queue_count+1 > MAX_PENDING_MESSAGES_DATA){
-		Log_Message("Data message queue overloaded");
-		return 1; // TODO QUEUE overloaded notify
-	}
-
-	message_data* msg = malloc_c(sizeof(message_data));
-	strcpy(msg->line, buff);
-	msg->target = conn_id;
-
-	message_data_queue[message_data_queue_count++] = msg;
-	return 0;
-}
-
-message_data* message_data_queue_get(){
-	if( !message_data_queue_count ){
-			return NULL;
-		}
-
-	message_data* msg = message_data_queue[0];
-	int i=0;
-	for(i=0;i<message_data_queue_count;i++){
-		message_data_queue[0]= message_data_queue[1];
-	}
-
-	message_data_queue[i+1] = NULL;
-	message_data_queue_count--;
-	return msg;
-}
-
-int message_queue_add(char* buff){
-	if(message_queue_count+1 > MAX_PENDING_MESSAGES){
-		Log_Message("Message queue overloaded");
-		return 1; // TODO QUEUE overloaded notify
-	}
-
-	message_command* msg = malloc_c(sizeof(message_command));
-
-	if( strlen(buff) > 0 ){
-		strcpy(msg->line, buff);
-	}
-
-	message_queue[message_queue_count++] = msg;
-	return 0;
-}
-
-message_command* message_queue_get(){
-	if( !message_queue_count ){
-		return NULL;
-	}
-
-	message_command* msg = message_queue[0];
-	int i=0;
-	for(i=0;i<message_queue_count;i++){
-		message_queue[0]= message_queue[1];
-	}
-
-	message_queue[i+1] = NULL;
-	message_queue_count--;
-	return msg;
 }
 
 int add_newline_callback(callback f){
@@ -181,7 +113,7 @@ void TIM6_DAC_IRQHandler() {
 	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
 		message_command* msg = message_queue_get();
-		if( msg ){
+		if( msg != NULL ){
 			for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
 				if (new_line_handlers[i] != NULL){
 					new_line_handlers[i](&msg->line);
@@ -282,7 +214,7 @@ void USART1_IRQHandler(void) {
 
 		protocol_log_byte(wifi_buff[wifi_buff_pos], DIR_IN);
 
-		if( wifi_buff_pos ==0 && wifi_buff[wifi_buff_pos] == '>' ){
+		if( wifi_buff_pos == 0 && wifi_buff[wifi_buff_pos] == '>' ){
 			is_welcome_byte = 1;
 		} else if( parse_ipd_packet(wifi_buff[wifi_buff_pos] ) ) {
 			wifi_buff_pos=0;
@@ -295,7 +227,7 @@ void USART1_IRQHandler(void) {
 			wifi_buff_pos++;
 		}
 
-		if ( wifi_buff_pos >= WIFI_BUFF_SIZE ){
+		if ( wifi_buff_pos >= MESSAGE_COMMAND_SIZE ){
 			wifi_buff_pos = 0;
 		}
 
@@ -724,7 +656,7 @@ int WIFI_TCP_Connect(char* host, int port) {
 	return 0;
 }
 
-int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
+int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){ // TODO MAKE MUTEX
 	if(conn_id != 0){
 		Log_Message("conn_id != 0");
 	}
@@ -736,8 +668,8 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 	is_new_line = 0;
 	WIFI_Send_Command(command,0);
 
-	WIFI_Read_Line(answer, 100, 200000);
-	WIFI_Read_Line(answer, 100, 200000);
+	WIFI_Read_Line(answer, 100, 800000);
+	WIFI_Read_Line(answer, 100, 800000);
 
 #ifndef ESP_DISABLE_ECHO
 	WIFI_Read_Line(answer, 100, 800000);
@@ -745,17 +677,22 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 
 	is_welcome_byte=0;
 
-	if (strncmp(answer, "link is not valid", 17) == 0) {
+	if (strncmp(answer, "\r\n", 2) != 0) {
+		WIFI_Read_Line(answer, 100, 800000);
+
+		if (strncmp(answer, "OK", 2) != 0) {
+			Log_Message("Not OK");
+			//return 1;
+		}
+	}else if (strncmp(answer, "OK", 2) != 0) {
+		Log_Message("Not OK");
+		//return 1;
+	}else if (strncmp(answer, "link is not valid", 17) == 0) {
 		Log_Message("Link is not valid");
 		return 1;
 	}
 
-	if (strncmp(answer, "OK", 2) != 0) {
-		Log_Message("Not OK");
-		return 1;
-	}
-
-	if( wait_welcome_byte(3200000) != 0 ){
+	if( wait_welcome_byte(800000) != 0 ){
 		Log_Message("No welcome message");
 		//return 1;
 	}
@@ -771,6 +708,29 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 	WIFI_Read_Line(answer, 512, 800000);
 #endif
 
+	if( strncmp(answer, " busy s...\r\n", 12) == 0 ){
+		int remained=100;
+		while( (remained--) > 0  ){
+			if (WIFI_Read_Line(answer, 512, 800000) != 0){
+				Log_Message("err");
+				continue;
+			}
+
+			if (strncmp(answer, "SEND OK", 7) == 0){
+				return 0;
+			 }
+
+			if( strncmp(answer, "\r\n", 2) == 0){
+				continue;
+			}
+			if( strncmp(answer, "OK", 2) == 0){
+				Log_Message("OK");
+			}else{
+				Log_Message("OK");
+			}
+		}
+		return 1;
+	}
 	WIFI_Read_Line(answer, 512, 3200000);
 
 	if (strncmp(answer, "SEND OK", 6) != 0) {

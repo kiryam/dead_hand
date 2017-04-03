@@ -1,6 +1,11 @@
 #include "wifi_server.h"
 #include "menu_wifi.h"
 #include "wifi.h"
+#include "request.h"
+#include "message_queue.h"
+#include "log.h"
+#include "config.h"
+#include "display.h"
 
 #define FLASH_KEY1      ((uint32_t)0x45670123)
 #define FLASH_KEY2      ((uint32_t)0xCDEF89AB)
@@ -10,7 +15,6 @@
 static char* message = "";
 static int server_status = 0;
 static uint8_t dots =0;
-static char buff[1024] = {0};
 static int clients_count=0;
 
 typedef struct {
@@ -54,6 +58,18 @@ int pending_disconnection_push(int conn_id){
 
 int pending_disconnection_pop() {
 	return pending_disconnection_last_item < 0 ? -1 : pending_disconnection[pending_disconnection_last_item--];
+}
+
+void func_wifi_server_on_connect(int conn_id){
+	clients_count++;
+	Log_Message("Connected");
+	//if (WIFI_TCP_Disconnect(conn_id) != 0 ) {
+	//	message="Disconnect error";
+	//	return;
+	//}
+
+	message="Listening";
+	return;
 }
 
 void WIFI_Server_Timer_Init() {
@@ -113,16 +129,16 @@ void handler_set_password(Request* request, char* response){
 
 void handler_get_protocol_log(Request* request, uint8_t* response){
 	Log_Message("Get protocol log");
-	strcpy(response, get_protocol_log());
+	strncpy(response, get_protocol_log(), RESPONSE_MAX_LEN);
 }
 
 
 void handler_memory(Request* request, uint8_t* response){
 	Log_Message("Memory");
-	sprintf(response, "Allocated memory: %d", get_memory_allocated_total());
+	sprintf(response, "Allocated memory: %d of %d", get_memory_allocated_total(), get_memory_max());
 }
 
-void func_wifi_on_new_line(char* line){ // TODO not void
+void func_wifi_on_new_line(char* line){
 	if (strncmp(&line[2], "CONNECT", 7) == 0) {
 		pending_connection_push(atoi(&line[0]));
 	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
@@ -138,122 +154,26 @@ void func_wifi_on_new_line(char* line){ // TODO not void
 	}
 }
 
-int parse_request(Request* request, char* raw_header){
-	char* ptr = raw_header;
-	int path_cur=0;
-
-	// Read message type
-	if( strncmp("GET", ptr, 3) == 0 ){
-		ptr = &ptr[4];
-		request->type = GET;
-	}
-
-	if( strncmp("POST", ptr, 4) == 0 ){
-		ptr = &ptr[4];
-		request->type = POST;
-	}
-
-	// Read path
-	while( ptr[path_cur] != ' ' && path_cur < REQUEST_MAX_PATH_LEN  ){
-		path_cur++;
-	}
-
-	if( path_cur >= REQUEST_MAX_PATH_LEN ){
-		Log_Message("Failed to read path");
-		return 1;
-	} else {
-		strncpy(request->path, ptr, path_cur);
-		request->path[path_cur] = '\0';
-		ptr = &ptr[path_cur+1];
-		path_cur = 0;
-	}
-
-	// Read protocol version
-	while( ptr[path_cur] != '\n' && path_cur < REQUEST_MAX_PATH_LEN  ){
-		path_cur++;
-	}
-
-	if( path_cur >= REQUEST_MAX_PATH_LEN ){
-		Log_Message("Failed to read proto");
-		return 1;
-	} else {
-		strncpy(request->proto, ptr, path_cur-1);
-		request->proto[path_cur-1] = '\0'; // /r/n
-		ptr = &ptr[path_cur+1];
-		path_cur = 0;
-	}
-
-	// Read headers
-	int header_parsed=0;
-	int header_parsed_done=0;
-	while (header_parsed < REQUEST_MAX_HEADER_COUNT && header_parsed_done == 0){
-		while( ptr[path_cur] != '\n' && path_cur < REQUEST_MAX_HEADER_RAW_KV  ){
-			path_cur++;
-		}
-
-		if( path_cur >= REQUEST_MAX_HEADER_RAW_KV ){
-			Log_Message("Failed to read on header");
-			return 1;
-		} else {
-			Request_Header* header = malloc_c(sizeof(Request_Header));
-
-			char *token;
-			char line[REQUEST_MAX_HEADER_RAW_KV]={0};
-			char *search = ": ";
-			strncpy(line, ptr, path_cur-1);
-
-			// key
-			token = strtok(line, search);
-			strcpy(header->key, token);
-
-			// value
-			token = strtok(NULL, search);
-			strcpy(header->value, token);
-
-			request->headers[header_parsed++] = header;
-
-			ptr = &ptr[path_cur+1];
-			path_cur = 0;
-
-			if(ptr[0] == '\r'){
-				request->headers_count = header_parsed;
-				header_parsed_done = 1;
-			}
-		}
-	}
-
-	Log_Message(ptr);
-
-	return 0;
-}
-
 void func_wifi_ondata(message_data* msg){
+	Request* request = request_init(msg->line);
 
-	Request request;
-	request.path[0] = '\0';
-	request.proto[0] = '\0';
-
-	//memset((Request_Header*)request.headers, NULL, sizeof(Request_Header*) * REQUEST_MAX_HEADER_COUNT);
-
-	if( parse_request(&request, msg->line) != 0){
-		Log_Message("Parse header error");
+	if( request == NULL ) {
+		Log_Message("Request init fail");
 		return;
 	}
 
 	uint8_t response[RESPONSE_MAX_LEN] = {0};
-	if( strncmp("/set_passwd", request.path, 11) == 0 ){
+	if( strncmp("/set_passwd", request->path, 11) == 0 ){
 		handler_set_password(&request, response);
-	} else if(strncmp("/get_protocol_log", request.path, 18) ==0){
+	} else if(strncmp("/get_protocol_log", request->path, 18) ==0){
 		handler_get_protocol_log(&request, response);
-	} else if(strncmp("/memory", request.path, 7) ==0){
+	} else if(strncmp("/memory", request->path, 7) ==0){
 		handler_memory(&request, response);
 	} else {
 		handler_index(&request, response);
 	}
 
-	for(int i=0;i<request.headers_count;i++){
-		free_c(request.headers[i]);
-	}
+	request_free(request);
 
 	int resonse_len = strlen(response);
 	uint8_t welcome[512] = {0};
@@ -264,11 +184,6 @@ void func_wifi_ondata(message_data* msg){
 		message="Failed to send";
 		return;
 	}
-
-	//return;
-
-
-
 
 	int bytes_pending = resonse_len;
 	uint8_t* response_ptr = response;
@@ -291,35 +206,6 @@ void func_wifi_ondata(message_data* msg){
 			bytes_pending=0;
 		}
 	}
-
-
-
-}
-
-void func_wifi_server_on_connect(int conn_id){
-	clients_count++;
-	message = "Client connected";
-	Log_Message("Connected");
-
-
-
-	//if (WIFI_TCP_Disconnect(conn_id) != 0 ) {
-	//	message="Disconnect error";
-	//	return;
-	//}
-
-	message="Listening";
-	return;
-}
-
-void func_wifi_server_closed(int conn_id){
-	message = "Listening";
-	return;
-}
-
-void func_wifi_server_on_data(){
-	buff[0]= '\0';
-	// TODO pass connection ID and data here
 }
 
 void WIFI_Server_Init(){

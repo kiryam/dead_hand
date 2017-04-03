@@ -1,6 +1,10 @@
 #include "common.h"
 #include <stdlib.h>
 #include <string.h>
+#include "tlsf.h"
+
+#define POOL_SIZE 1024 * 100
+static char pool[POOL_SIZE];
 
 void sleepMs(unsigned int e) {
 	e = e*1000;
@@ -9,39 +13,23 @@ void sleepMs(unsigned int e) {
 	}
 }
 
-static int size_allocated;
-
-_PTR malloc_c(size_t size)
-{
-	_PTR allocated = malloc(size+sizeof(size_t));
-	if( allocated == NULL ){
-		return NULL;
-	}
-	memcpy(allocated, &size, sizeof(size_t));
-	size_allocated+=size;
-
-	// TODO REMOVE DEBUG
-	size_t test_size;
-	memcpy(&test_size, allocated, sizeof(size_t));
-	if( size > 10000 ){
-		Log_Message("err");
-	}
-
-	return allocated+sizeof(size_t);
+void memory_init(){
+	init_memory_pool(POOL_SIZE, pool);
 }
 
-void free_c(_PTR p){
-	_PTR real_block = p-(sizeof(size_t));
-	size_t size;
-	memcpy(&size, real_block, sizeof(size_t));
-	if( size > 10000 ){
-		Log_Message("err");
-	}
-	size_allocated -= size;
-	free(real_block);
+_PTR malloc_c(size_t size) {
+	return malloc_ex(size, pool);
+}
+
+void free_c(_PTR p) {
+	free_ex(p, pool);
 }
 
 // sum off all memory allocated
 int get_memory_allocated_total(){
-	return size_allocated;
+	return get_used_size(pool);
+}
+
+int get_memory_max(){
+	return get_max_size(pool);
 }
