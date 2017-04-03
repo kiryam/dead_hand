@@ -14,6 +14,8 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
+#define MEMORY_SIZE 1199523 - 1024
+
 
 void BTN_Init() {
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
@@ -44,11 +46,11 @@ void BCKP_Init(){
 	//			  errorindex++;
 	//		  }
 	 //  }
-
 }
 
 int
 main(int argc, char* argv[]) {
+	memory_init();
 	BCKP_Init();
 
 	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);

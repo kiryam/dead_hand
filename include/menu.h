@@ -18,9 +18,11 @@ typedef struct {
 } MENU_List_Item;
 
 
+#define MENU_MAX_ELEMENTS_COUNT 1024
+
 typedef struct {
 	int count;
-	MENU_List_Item* items;
+	MENU_List_Item* items[MENU_MAX_ELEMENTS_COUNT];
 } List_Elements;
 
 void Menu_Init();

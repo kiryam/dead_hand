@@ -83,14 +83,15 @@ void func_wifi_server(){
 }
 
 void func_wifi_tcp_connect() {
+	// FIXME
 	int conn_ok = 0;
 	uint8_t answer[100] = {0};
 	WIFI_TCP_Connect("192.168.1.216", 7000); // TODO
 	WIFI_TCP_Send(0, "0",1);
 
-	int bytes_read = WIFI_TCP_Recv(answer); // TODO CHECK
+	//int bytes_read = WIFI_TCP_Recv(answer); // TODO CHECK
 
-	if ( bytes_read >= 0){
+	/*if ( bytes_read >= 0){
 		Hello hello_message = {42};
 		pb_istream_t stream = pb_istream_from_buffer(answer, bytes_read);
 
@@ -100,6 +101,7 @@ void func_wifi_tcp_connect() {
 		}
 		conn_ok=0;
 	}
+	*/
 
 	WIFI_TCP_Disconnect(0);
 }
