@@ -8,6 +8,7 @@
 #include "display.h"
 #include <stdlib.h>
 #include "log.h"
+#include "server.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -90,6 +91,11 @@ main(int argc, char* argv[]) {
 	Log_Message("Display ok");
 
 	WIFI_Init();
+	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
+		Log_Message("Server start ok");
+	}else{
+		Log_Message("Failed to start server");
+	}
 
 	while (1) {
 		IWDG_ReloadCounter();
