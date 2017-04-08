@@ -23,13 +23,20 @@ void handler_set_password(Request* request, char* response){
 		if (request_get_post_field(request, "password", password) == 0 ){
 			config_set("password", password);
 		} else {
-			strcpy(password, "FIELD_NOT_FOUND");
+			strcpy(password, "FIELD_PASSWORD_NOT_FOUND");
 		}
 
-		sprintf(answer, "<h2 class=\"sub-header\">Password set</h2><div class=\"table-responsive\">Password set to <code>%s</code></div>", config_get("password"));
+		char* ssid[128] ={0};
+		if (request_get_post_field(request, "ssid", ssid) == 0 ){
+			config_set("name", ssid);
+		} else {
+			strcpy(password, "FIELD_SSID_NOT_FOUND");
+		}
+
+		sprintf(answer, "<h2 class=\"sub-header\">Password set</h2><div class=\"table-responsive\">SSID set to: <code>%s</code> Password set to <code>%s</code></div>", config_get("name"), config_get("password"));
 	} else {
 		strcpy(answer,"<h2 class=\"sub-header\">Set connect password</h2><div class=\"table-responsive\">"
-				"<form method=\"POST\">Password: <input name=\"password\" /><br /><input name=\"password2\" /><input type=\"submit\" value=\"Connect\" /></form>"
+				"<form method=\"POST\">SSID: <input name=\"ssid\" /><br />Password: <input name=\"password\" /><input type=\"submit\" value=\"Connect\" /></form>"
 				"</div>");
 	}
 

@@ -1,1 +1,1 @@
-alert("it works!!!");
+var js_ok=1;

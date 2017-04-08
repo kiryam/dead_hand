@@ -582,6 +582,9 @@ int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
  * +CWLAP:(3,\"kiryam\",-64,\"d0:17:c2:64:22:d4\",11)\r\n
  */
 int WIFI_Parse_Point_Answer(char* answer, WIFI_Point *point) {
+	if( answer[0] == '\r' && answer[1] == 'C' ){
+		answer[0] = '+';
+	}
 	if( strncmp("+CWLAP", answer, 6) == 0) {
 		char tmp[200] = {0};
 		strncpy(tmp, answer, 200);
@@ -603,7 +606,8 @@ int WIFI_Parse_Point_Answer(char* answer, WIFI_Point *point) {
 	return 1;
 }
 
-int WIFI_Retreive_List(){
+int WIFI_Retreive_List(WIFI_List_Result* result){
+	result->found =0;
 	//if (WIFI_Disconnect() != 0) {
 	//	return 1;
 	//}
@@ -626,8 +630,41 @@ int WIFI_Retreive_List(){
 	}
 #endif
 
-	Log_Message("AT+CWLAP ok");
-	return 0;
+	int readed_count=MAX_POINTS_COUNT;
+	while( (readed_count--) > 0){
+		if ( WIFI_Read_Line(answer, 100, 8000000) == 1 ){
+			Log_Message("Points retrieve loop went too long");
+			return 1;
+		}
+
+		if( strncmp(answer, "OK", 2) == 0 ) {
+			return 0;
+		} else if(strncmp(answer, "\r\n", 2) == 0) {
+			continue;
+		} else {
+			WIFI_Point* point = malloc_c(sizeof(WIFI_Point));
+
+			if ( WIFI_Parse_Point_Answer(answer, point) == 0 ){
+				Log_Message("Parsed ok");
+				Log_Message(point->name);
+				result->points[result->found++] = point;
+			}else{
+				free_c(point);
+				Log_Message("Failed to parse");
+				Log_Message(answer);
+			}
+		}
+	}
+
+	Log_Message("AT+CWLAP fail");
+	return 1;
+}
+
+void WIFI_List_Result_Free(WIFI_List_Result* result){
+	for(int i=0; i< result->found; i++){
+		free_c(result->points[i]);
+	}
+	free_c(result);
 }
 
 // TODO

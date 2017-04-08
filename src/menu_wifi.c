@@ -111,10 +111,10 @@ void func_start_ap(){
 	Log_Message("CIPSERVER=0 OK");
 
 	if (WIFI_Set_CWMODE(2) != 0 ) {
-		//message="Failed to set CWMODE";
+		Log_Message("CWMODE ERROR");
 		return;
 	}
-	Log_Message("CWMODE=2 OK");
+	Log_Message("CWMODE=3 OK");
 
 	if (WIFI_Set_CWSAP("Dead_Hand", "", 5, 0) != 0){
 		//message="Failed to run AP";

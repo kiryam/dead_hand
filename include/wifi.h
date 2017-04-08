@@ -14,21 +14,21 @@ extern "C" {
 #define MAX_NEWLINE_CALLBACK_COUNT 10
 #define MAX_DATA_CALLBACK_COUNT 5
 
-#define MAX_POINTS_COUNT 5
-
-
+#define MAX_POINTS_COUNT 50
 #define WIFI_POINT_MAX_LEN 60
 
 #define IP_MAX_LEN 40
 #define MAC_MAX_LEN 41
 
 
-
 typedef struct {
 	char name[WIFI_POINT_MAX_LEN];
 } WIFI_Point;
 
-
+typedef struct {
+	int found;
+	WIFI_Point* points[MAX_POINTS_COUNT];
+} WIFI_List_Result;
 
 void WIFI_Init();
 int WIFI_Test();
