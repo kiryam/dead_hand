@@ -134,6 +134,8 @@ void TIM7_IRQHandler() {
 				handler_metrics(request, response_page);
 			} else if(strncmp("/favicon.ico", request->path, 11) == 0) {
 				handler_favicon(request, response_page);
+			} else if(strcmp("/style.css", request->path) == 0) {
+				handler_style(request, response_page);
 			} else {
 				handler_404(request, response_page);
 			}

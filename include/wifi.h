@@ -20,7 +20,7 @@ extern "C" {
 #define WIFI_POINT_MAX_LEN 60
 
 #define IP_MAX_LEN 40
-#define MAC_MAX_LEN 40
+#define MAC_MAX_LEN 41
 
 
 

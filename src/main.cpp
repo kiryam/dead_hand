@@ -33,20 +33,6 @@ void BCKP_Init(){
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_BKPSRAM, ENABLE);
 	PWR_BackupRegulatorCmd(ENABLE);
-
-	// Write to Backup SRAM with 32-Bit Data
-	int i;
-	int errorindex=0;
-	  // for (i = 0x0; i < 0x100; i += 4) {
-		//   *(__IO uint32_t *) (BKPSRAM_BASE + 1) = 10;
-	  // }
-
-	   // Check the written Data
-	 //  for (i = 0x0; i < 0x100; i += 4) {
-	//		  if ((*(__IO uint32_t *) (BKPSRAM_BASE + i)) != i){
-	//			  errorindex++;
-	//		  }
-	 //  }
 }
 
 int

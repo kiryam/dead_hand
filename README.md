@@ -8,3 +8,9 @@ Wifi: esp-01 (es8266)
 Relay: SRD-05VDC-Sl-C
 
 Display: SSD1306, I2C 0.96
+
+
+# build
+
+build resources.s in resources path. (make)
+Add resources.o as object into project

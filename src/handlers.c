@@ -1,11 +1,16 @@
 #include <stdio.h>
 #include <string.h>
 #include "request.h"
+#include <resources.h>
 
 
 void handler_index(Request* request,  char* response) {
 	Log_Message("index");
 	page_index(response, "<h2 class=\"sub-header\">Section title</h2><div class=\"table-responsive\">Hello</div>");
+}
+
+void handler_style(Request* request,  char* response){
+	strcpy(response, static_style);
 }
 
 void handler_set_password(Request* request, char* response){
