@@ -164,3 +164,16 @@ void request_free(Request* request){
 
 	free_c(request);
 }
+
+
+int request_get_post_field(Request* request, char* field_name, char* field_value){
+	for(int i=0; i< request->data_count;i++){
+		Request_Data* data= request->data[i];
+		if( strcmp(data->key, field_name) == 0 ){
+			strncpy(field_value, data->value, REQUEST_DATA_VALUE_LEN);
+			return 0;
+		}
+	}
+
+	return 1;
+}
