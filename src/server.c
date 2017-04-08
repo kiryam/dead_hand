@@ -14,6 +14,8 @@ static int pending_connection_last_item = -1;
 static int pending_disconnection[MAX_PENDING_DISCONNECTION];
 static int pending_disconnection_last_item = -1;
 
+int open_connections[20] = {0};
+
 typedef struct {
 	int connect_id;
 	char data[MAX_DATA_SIZE];
@@ -66,6 +68,7 @@ int pending_disconnection_pop() {
 
 void func_wifi_server_on_connect(int conn_id){
 	clients_count++;
+	open_connections[conn_id] = 1;
 	Log_Message("Connected");
 	return;
 }
@@ -93,6 +96,7 @@ void TIM7_IRQHandler() {
 		int conn_id = pending_disconnection_pop();
 		if( conn_id >= 0 ){
 			clients_count--;
+			open_connections[conn_id] = 0;
 			return;
 		}
 
@@ -113,7 +117,9 @@ void TIM7_IRQHandler() {
 			}
 
 			char response_page[RESPONSE_MAX_LEN] = {0};
-			if( strncmp("/set_passwd", request->path, 11) == 0 ){
+			if (request->path[0] == '/' && request->path[1] == '\0' ) {
+				handler_index(request, response_page);
+			} else if( strncmp("/password", request->path, 9) == 0 ){
 				handler_set_password(request, response_page);
 			}
 
@@ -126,8 +132,10 @@ void TIM7_IRQHandler() {
 				handler_memory(request, response_page);
 			} else if(strncmp("/metrics", request->path, 8) ==0){
 				handler_metrics(request, response_page);
+			} else if(strncmp("/favicon.ico", request->path, 11) == 0) {
+				handler_favicon(request, response_page);
 			} else {
-				handler_index(request, response_page);
+				handler_404(request, response_page);
 			}
 
 			request_free(request);
@@ -137,7 +145,7 @@ void TIM7_IRQHandler() {
 			char* response_ptr = response;
 
 			uint8_t tmp_buff[MAX_PACKET_LEN+1] ={0};
-			while (bytes_pending){
+			while (bytes_pending > 0){
 				if( bytes_pending > MAX_PACKET_LEN ){
 					strncpy(tmp_buff, response_ptr, MAX_PACKET_LEN);
 					if (WIFI_TCP_Send(data_item->connect_id, tmp_buff, MAX_PACKET_LEN) != 0 ){
@@ -146,6 +154,7 @@ void TIM7_IRQHandler() {
 					}
 					response_ptr = &response_ptr[MAX_PACKET_LEN];
 					bytes_pending -= MAX_PACKET_LEN;
+					sleepMs(1000);
 				} else {
 					if (WIFI_TCP_Send(data_item->connect_id, response_ptr, bytes_pending) != 0 ){
 						Log_Message("Send data failed");

@@ -17,11 +17,15 @@ extern "C" {
 #define MAX_POINTS_COUNT 5
 
 
+#define WIFI_POINT_MAX_LEN 60
+
 #define IP_MAX_LEN 40
 #define MAC_MAX_LEN 40
 
+
+
 typedef struct {
-	char name[20];
+	char name[WIFI_POINT_MAX_LEN];
 } WIFI_Point;
 
 

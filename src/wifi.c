@@ -2,6 +2,7 @@
 #include "wifi.h"
 #include "log.h"
 #include "message_queue.h"
+#include "server.h"
 
 
 int wifi_init_ok = 0;
@@ -170,7 +171,7 @@ int parse_ipd_packet(char cur_byte) {
 			recv_message_size = atoi(recv_message_size_tmp);
 			if(recv_message_size >= MESSAGE_DATA_MAX_SIZE){
 				recv_message_data_started = 0;
-				Log_Message("Message to long");
+				Log_Message("Message too long");
 				return 1;
 			}else {
 				recv_message_size_readed = 1;
@@ -189,9 +190,9 @@ int parse_ipd_packet(char cur_byte) {
 			return 1;
 		}
 
-		if ( recv_message_data_bytes_read < (recv_message_size-1)  ){
-			recv_message_buff[recv_message_data_bytes_read++] = cur_byte;
-		} else {
+		recv_message_buff[recv_message_data_bytes_read++] = cur_byte;
+
+		if ( recv_message_data_bytes_read == recv_message_size) {
 			recv_message_data_started = 0;
 			message_data_queue_add(recv_message_conn_id, recv_message_buff);
 			Log_Message(recv_message_buff);
@@ -245,6 +246,7 @@ void USART1_IRQHandler(void) {
 				recv_message_size_cur_pos=0;
 				recv_message_conn_id_cur_pos=0;
 				packed_bytes_readed=0;
+				recv_message_size_tmp[0] = '\0';
 			}
 		}
 	}
@@ -553,6 +555,17 @@ int WIFI_Disconnect(){
 	return strncmp(answer, "OK", 2);
 }
 
+// 0-82
+int WIFI_Power(unsigned int power){
+	char answer[100]={0};
+	char command[20] = {0};
+	sprintf(command, "AT+RFPOWER=%d\r\n", power);
+	WIFI_Exec_Cmd_Get_Answer(command, answer);
+	return strncmp(answer, "OK", 2);
+}
+
+
+
 int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
 	char answer[100] = {0};
 	char command[200] = {0};
@@ -570,14 +583,17 @@ int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
  */
 int WIFI_Parse_Point_Answer(char* answer, WIFI_Point *point) {
 	if( strncmp("+CWLAP", answer, 6) == 0) {
+		char tmp[200] = {0};
+		strncpy(tmp, answer, 200);
 		const char delim[2] =",";
 		char *token;
 		int tokenNum = 0;
-		token = strtok(answer, delim);
+		token = strtok(tmp, delim);
 		while( token != NULL ) {
 			if( tokenNum++ == 1){
-				strncpy(point->name, &token[1], strlen(token)-2);
-				point->name[strlen(token)-2] = '\0';
+				char point_name[WIFI_POINT_MAX_LEN] ={0};
+				strncpy(point_name, &token[1], strlen(token)-2);
+				strncpy(point->name, point_name, WIFI_POINT_MAX_LEN);
 				return 0;
 			}
 			token = strtok(NULL, delim);
@@ -648,7 +664,16 @@ int WIFI_TCP_Connect(char* host, int port) {
 	return 0;
 }
 
-int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){ // TODO MAKE MUTEX
+int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
+	if( bytes_count > MAX_PACKET_LEN ){
+		Log_Message("Max packet len");
+		return 1;
+	}
+
+	if(open_connections[conn_id] == 0){
+		Log_Message("Connection already closed");
+		return 1;
+	}
 	char answer[100] = {0};
 	char command[20] = {0};
 	sprintf(command, "AT+CIPSEND=%d,%d\r\n", conn_id, bytes_count);
@@ -782,14 +807,17 @@ int WIFI_Set_CIPSERVER(int mode, int port){
 		if (strncmp(answer, "OK", 2) == 0) {
 			return 0;
 		}
-		if ( WIFI_Read_Line(answer, 100, 200000) ){
-			return 1;
-		}
 
 		if( strncmp(answer, "\r\n", 2) == 0 ){
 			WIFI_Read_Line(answer, 100, 200000);
 			return 0;
 		}
+
+		if ( WIFI_Read_Line(answer, 100, 200000) ){
+			return 1;
+		}
+
+
 
 		if (strncmp(answer, "OK", 2) != 0) {
 			return 1;
@@ -799,7 +827,7 @@ int WIFI_Set_CIPSERVER(int mode, int port){
 			WIFI_Read_Line(answer, 100, 200000); // \r\n
 		}
 
-		WIFI_Read_Line(answer, 100, 200000);
+		//WIFI_Read_Line(answer, 100, 200000);
 		if (strncmp(answer, "OK", 2) != 0) {
 			return 1;
 		}
@@ -857,6 +885,10 @@ void WIFI_Init(){
 		if(WIFI_Set_CWMODE(1) == 0){
 			Log_Message("WIFI_Set_CWMODE ok");
 			wifi_init_ok = 1;
+		}
+
+		if(WIFI_Power(82) == 0){
+			Log_Message("Set RX TX power ok");
 		}
 	}else{
 		Log_Message("Wifi test failed");
