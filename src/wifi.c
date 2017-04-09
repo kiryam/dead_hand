@@ -300,7 +300,7 @@ void MY_USART_Init(){
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 1;
+	base_timer.TIM_Period = 10;
 	TIM_TimeBaseInit(TIM6, &base_timer);
 
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
@@ -382,9 +382,8 @@ int WIFI_Test(){
 
 int WIFI_Set_CIPMODE(int mode){
 	char answer[100] = {0};
-	char command[19]= "AT+CIPMODE=";
-	itoa(mode, &command[strlen(command)], 10);
-	strcat(command, "\r\n");
+	char command[19]= {0};
+	sprintf(command, "AT+CIPMODE=%d\r\n", mode);
 
 	is_new_line=0;
 	WIFI_Send_Command(command, 0);
@@ -486,7 +485,9 @@ int read_to_quote(char* answer, char* out){
 int WIFI_Get_Status(char* ip, char* sta_ip, char* mac, char* sta_mac){
 	char answer[512] ={0};
 	ip[0] = '\0';
+	sta_ip[0] = '\0';
 	mac[0] = '\0';
+	sta_mac[0] = '\0';
 	is_new_line = 0;
 	int lines_estimated = 6;
 
