@@ -79,7 +79,7 @@ void WIFI_Server_Timer_Init() {
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 10;
+	base_timer.TIM_Period = 50;
 
 	TIM_TimeBaseInit(TIM7, &base_timer);
 
