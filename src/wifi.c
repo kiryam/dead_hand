@@ -117,9 +117,11 @@ void TIM6_DAC_IRQHandler() {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
 		message_command* msg = message_queue_get();
 		if( msg != NULL ){
-			for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
-				if (new_line_handlers[i] != NULL){
-					new_line_handlers[i](&msg->line);
+			if( msg->line[0] != '\0' ){
+				for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
+					if (new_line_handlers[i] != NULL){
+						new_line_handlers[i](&msg->line);
+					}
 				}
 			}
 			free_c(msg);
@@ -410,6 +412,13 @@ int WIFI_Set_CWMODE(int mode){
 		return 1;
 	}
 
+
+	if(strncmp(answer, "\r\n", 2) == 0){
+		WIFI_Read_Line(answer,100, 200000);
+		Log_Message(answer);
+		//return 1;
+	}
+
 	if ( strncmp(answer, "busy", 4) == 0 ){
 		Log_Message("busy");
 		return 1;
@@ -474,7 +483,7 @@ int read_to_quote(char* answer, char* out){
 	return 0;
 }
 
-int WIFI_Get_Status(char* ip, char* mac){
+int WIFI_Get_Status(char* ip, char* sta_ip, char* mac, char* sta_mac){
 	char answer[512] ={0};
 	ip[0] = '\0';
 	mac[0] = '\0';
@@ -487,6 +496,7 @@ int WIFI_Get_Status(char* ip, char* mac){
 		if (WIFI_Read_Line(answer, 500, 800000) != 0 ){
 			return 1;
 		}
+		Log_Message(answer);
 		if( strncmp("+CIFSR:", answer, 7) == 0){
 			char tmp[IP_MAX_LEN] = {0};
 			if( strncmp(&answer[7], "APIP", 4) == 0 ){
@@ -494,13 +504,13 @@ int WIFI_Get_Status(char* ip, char* mac){
 				strncpy(ip, tmp, IP_MAX_LEN);
 			}else if( strncmp(&answer[7], "STAIP", 5) == 0){
 				read_to_quote(&answer[14], tmp);
-				strncpy(ip, tmp, IP_MAX_LEN);
+				strncpy(sta_ip, tmp, IP_MAX_LEN);
 			}else if(  strncmp(&answer[7], "APMAC", 5) == 0 ){
 				read_to_quote(&answer[14], tmp);
 				strncpy(mac, tmp, MAC_MAX_LEN);
 			}else if( strncmp(&answer[7], "STAMAC", 6) == 0 ){
 				read_to_quote(&answer[15], tmp);
-				strncpy(mac, tmp, MAC_MAX_LEN);
+				strncpy(sta_mac, tmp, MAC_MAX_LEN);
 			}
 		}else{
 			break;
@@ -564,7 +574,11 @@ int WIFI_Power(unsigned int power){
 	return strncmp(answer, "OK", 2);
 }
 
-
+int WIFI_Restore(){
+	char answer[100]={0};
+	WIFI_Exec_Cmd_Get_Answer("AT+RESTORE\r\n", answer);
+	return strncmp(answer, "OK", 2);
+}
 
 int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
 	char answer[100] = {0};
@@ -573,6 +587,12 @@ int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
 
 	if (WIFI_Exec_Cmd_Get_Answer(command, answer) != 0) {
 		return 1;
+	}
+
+	if(strncmp(answer, "\r\n", 2) == 0){
+		WIFI_Read_Line(answer,100, 200000);
+		Log_Message(answer);
+		//return 1;
 	}
 
 	return strncmp(answer, "OK", 2);
@@ -612,9 +632,9 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 	//	return 1;
 	//}
 
-	if (WIFI_Set_CWMODE(1) != 0) {
-		return 1;
-	}
+	//if (WIFI_Set_CWMODE(1) != 0) {
+	//	return 1;
+	//}
 
 	is_new_line = 0;
 	WIFI_Send_Command("AT+CWLAP\r\n", 0);
@@ -919,7 +939,7 @@ void WIFI_Init(){
 
 	if ( WIFI_Test() == 0) {
 		Log_Message("Wifi test ok");
-		if(WIFI_Set_CWMODE(1) == 0){
+		if(WIFI_Set_CWMODE(3) == 0){
 			Log_Message("WIFI_Set_CWMODE ok");
 			wifi_init_ok = 1;
 		}

@@ -6,6 +6,10 @@ extern "C" {
 #endif
 extern const char static_style[];
 extern const char static_javascript[];
+extern const char static_template_page[];
+
+extern const char static_page_connect[];
+extern const char static_page_manage[];
 
 
 #ifdef __cplusplus

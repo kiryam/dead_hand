@@ -3,9 +3,12 @@
 #include "server.h"
 
 static char ip[IP_MAX_LEN] = {0};
+static char sta_ip[IP_MAX_LEN] = {0};
+
 static char mac[MAC_MAX_LEN] = {0};
+static char sta_mac[MAC_MAX_LEN] = {0};
 void WIFI_Status_Init(){
-	WIFI_Get_Status(&ip, &mac);
+	WIFI_Get_Status(&ip, &sta_ip, &mac, &sta_mac);
 }
 
 void WIFI_Status_Unregister(){}
@@ -16,15 +19,17 @@ void render_wifi_status(){
 
 	char ip_str[IP_MAX_LEN+10] = {0};
 	sprintf(ip_str, "%s:%d", ip, SERVER_PORT);
+
 	SSD1306_Puts(ip_str, &Font_7x10, SSD1306_COLOR_WHITE);
 	SSD1306_GotoXY(0,10);
 
-	char mac_str[MAC_MAX_LEN+10] = {0};
-	sprintf(mac_str, "MAC:%s", mac);
-	SSD1306_Puts(mac_str, &Font_7x10, SSD1306_COLOR_WHITE);
+	char sta_ip_str[IP_MAX_LEN+10] = {0};
+	sprintf(sta_ip_str, "%s:%d", sta_ip, SERVER_PORT);
+	SSD1306_Puts(sta_ip_str, &Font_7x10, SSD1306_COLOR_WHITE);
 	SSD1306_GotoXY(0,20);
 
-	sprintf(mac_str, "PWD: %s", config_get("password"));
+	char mac_str[MAC_MAX_LEN+10] = {0};
+	sprintf(mac_str, "MAC:%s", mac);
 	SSD1306_Puts(mac_str, &Font_7x10, SSD1306_COLOR_WHITE);
 	SSD1306_GotoXY(0,30);
 
@@ -64,7 +69,7 @@ void controller_wifi_status(int btn){
 	}
 
 	if (btn & BTN4){
-		WIFI_Get_Status(&ip, &mac);
+		WIFI_Get_Status(&ip, &sta_ip, &mac, &sta_mac);
 	}
 
 }

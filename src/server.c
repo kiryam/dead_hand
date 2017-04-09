@@ -119,8 +119,8 @@ void TIM7_IRQHandler() {
 			char response_page[RESPONSE_MAX_LEN] = {0};
 			if (request->path[0] == '/' && request->path[1] == '\0' ) {
 				handler_index(request, response_page);
-			} else if( strncmp("/password", request->path, 9) == 0 ){
-				handler_set_password(request, response_page);
+			} else if( strcmp("/manage", request->path) == 0 ){
+				handler_manage(request, response_page);
 			}
 
 #ifdef PROTO_LOG
@@ -132,6 +132,18 @@ void TIM7_IRQHandler() {
 				handler_memory(request, response_page);
 			} else if(strncmp("/metrics", request->path, 8) ==0){
 				handler_metrics(request, response_page);
+			} else if(strcmp("/connect", request->path) ==0){
+				handler_connect(request, response_page);
+			} else if(strcmp("/get_ap_list", request->path) ==0){
+				handler_get_ap_list(request, response_page);
+			} else if(strcmp("/ap_connect", request->path) == 0){
+				handler_ap_connect(request, response_page);
+			} else if(strcmp("/relay_on", request->path) == 0){
+				handler_relay_on(request, response_page);
+			} else if(strcmp("/relay_off", request->path) == 0){
+				handler_relay_off(request, response_page);
+			} else if(strcmp("/restore", request->path) == 0){
+				handler_restore(request, response_page);
 			} else if(strncmp("/favicon.ico", request->path, 11) == 0) {
 				handler_favicon(request, response_page);
 			} else if(strcmp("/style.css", request->path) == 0) {
