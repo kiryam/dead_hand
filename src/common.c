@@ -1,5 +1,10 @@
 #include "common.h"
 #include <stdlib.h>
+#include <string.h>
+#include "tlsf.h"
+
+#define POOL_SIZE 1024 * 30
+static char pool[POOL_SIZE];
 
 void sleepMs(unsigned int e) {
 	e = e*1000;
@@ -8,13 +13,23 @@ void sleepMs(unsigned int e) {
 	}
 }
 
-static int size_allocated;
-_PTR malloc_c(size_t size)
-{
-	size_allocated+=size;
-    return malloc(size);
+void memory_init(){
+	init_memory_pool(POOL_SIZE, pool);
 }
 
-void free_c(_PTR p){
-	free(p);
+_PTR malloc_c(size_t size) {
+	return malloc_ex(size, pool);
+}
+
+void free_c(_PTR p) {
+	free_ex(p, pool);
+}
+
+// sum off all memory allocated
+int get_memory_allocated_total(){
+	return get_used_size(pool);
+}
+
+int get_memory_max(){
+	return get_max_size(pool);
 }

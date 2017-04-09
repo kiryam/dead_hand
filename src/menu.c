@@ -6,14 +6,13 @@ static unsigned int caption_index =0;
 
 void Menu_Init() {
 	listElements.count = 0;
-	listElements.items = malloc(sizeof(MENU_List_Item));
+	//listElements.items =
 }
 
 void Menu_Free(){
 	for(int i=0; i<listElements.count; i++){
-		free_c(&listElements.items[i]);
+		free_c(listElements.items[i]);
 	}
-	free_c(listElements.items);
 	listElements.count = 0;
 }
 
@@ -27,14 +26,13 @@ void Menu_Add_Item_Param( char* caption,  functiontype fnc, char* param1 ){
 	item->is_selected = listElements.count > 0 ? 0 : 1;
 	item->function = fnc;
 
-	listElements.items = realloc(listElements.items, (listElements.count+1)*sizeof(MENU_List_Item));
-	listElements.items[listElements.count] = *item;
+	listElements.items[listElements.count] = item;
 	listElements.count++;
 }
 
 int get_active_item_index(){
 	for (int i=0; i<listElements.count;i++){
-		if ( listElements.items[i].is_selected == 0 ){
+		if ( listElements.items[i]->is_selected == 0 ){
 			continue;
 		}
 
@@ -47,9 +45,9 @@ int get_active_item_index(){
 void list_select_item_at_index(int index){
 	for (int i=0; i<listElements.count;i++){
 		if ( i == index ){
-			listElements.items[i].is_selected = 1;
+			listElements.items[i]->is_selected = 1;
 		} else {
-			listElements.items[i].is_selected = 0;
+			listElements.items[i]->is_selected = 0;
 		}
 	}
 	current_item_active = 0;
@@ -58,7 +56,7 @@ void list_select_item_at_index(int index){
 
 
 MENU_List_Item* Menu_Get_Active_Item(){
-	return &listElements.items[get_active_item_index()];
+	return listElements.items[get_active_item_index()];
 }
 
 void render_menu() {
@@ -86,18 +84,18 @@ void render_menu() {
 	current_item_active++;
 
 	for(int i=from; i<to;i++) {
-		MENU_List_Item item = listElements.items[i];
+		MENU_List_Item* item = listElements.items[i];
 		SSD1306_GotoXY(0, displayed*18+2);
 
-		if(caption_index >= strlen(item.caption)){
+		if(caption_index >= strlen(item->caption)){
 			caption_index = 0;
 		}
 
-		if (item.is_selected == 1) {
+		if (item->is_selected == 1) {
 			SSD1306_DrawFilledRectangle(0, displayed*18, 128, 18+2,SSD1306_COLOR_WHITE);
-			SSD1306_Puts(&item.caption[strlen(item.caption) > 11 ? caption_index : 0], &Font_11x18, SSD1306_COLOR_BLACK);
+			SSD1306_Puts(&item->caption[strlen(item->caption) > 11 ? caption_index : 0], &Font_11x18, SSD1306_COLOR_BLACK);
 		} else {
-			SSD1306_Puts(item.caption, &Font_11x18, SSD1306_COLOR_WHITE);
+			SSD1306_Puts(item->caption, &Font_11x18, SSD1306_COLOR_WHITE);
 		}
 
 		displayed++;
@@ -128,7 +126,7 @@ void controller_menu(int btn) {
 
 	if (btn & BTN4) {
 		int i = get_active_item_index();
-		listElements.items[i].function();
+		listElements.items[i]->function();
 	}
 
 	if (btn & BTN1) {

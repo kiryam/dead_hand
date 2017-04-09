@@ -8,11 +8,14 @@
 #include "display.h"
 #include <stdlib.h>
 #include "log.h"
+#include "server.h"
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
+
+#define MEMORY_SIZE 1199523 - 1024
 
 
 void BTN_Init() {
@@ -30,25 +33,11 @@ void BCKP_Init(){
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_BKPSRAM, ENABLE);
 	PWR_BackupRegulatorCmd(ENABLE);
-
-	// Write to Backup SRAM with 32-Bit Data
-	int i;
-	int errorindex=0;
-	  // for (i = 0x0; i < 0x100; i += 4) {
-		//   *(__IO uint32_t *) (BKPSRAM_BASE + 1) = 10;
-	  // }
-
-	   // Check the written Data
-	 //  for (i = 0x0; i < 0x100; i += 4) {
-	//		  if ((*(__IO uint32_t *) (BKPSRAM_BASE + i)) != i){
-	//			  errorindex++;
-	//		  }
-	 //  }
-
 }
 
 int
 main(int argc, char* argv[]) {
+	memory_init();
 	BCKP_Init();
 
 	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
@@ -88,6 +77,11 @@ main(int argc, char* argv[]) {
 	Log_Message("Display ok");
 
 	WIFI_Init();
+	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
+		Log_Message("Server start ok");
+	}else{
+		Log_Message("Failed to start server");
+	}
 
 	while (1) {
 		IWDG_ReloadCounter();

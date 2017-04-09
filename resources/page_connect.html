@@ -1,0 +1,83 @@
+<html>
+<head>
+	<title>Connect</title>
+	
+	<script type="text/javascript">
+		var known_aps = {};
+	
+		function connect(ssid, password){
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange=function() {
+				if (this.readyState==4 && this.status==200) {
+					console.log("Connect ok");
+				}
+			}
+			
+			xhr.open("POST", "/ap_connect", true);
+			xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+			xhr.send("ssid="+ssid+"&password="+password);
+		} 
+		
+		function refresh_ap(){
+			var xhr = new XMLHttpRequest();
+			xhr.onreadystatechange=function() {
+				if (this.readyState==4 && this.status==200) {
+					console.log("refresh ok");
+					
+					var aps = this.responseText.split("\n");
+					
+					aps.forEach(function(item, i, arr) {
+						if(item != "") {
+					  		known_aps[item] = true;
+						}
+					});
+					
+					var ul = document.getElementById("ap_list")
+					
+					while( ul.firstChild ){
+					  ul.removeChild( ul.firstChild );
+					}
+						
+					Object.keys(known_aps).forEach(function(item) {
+						var createA = document.createElement('a');
+				        var createAText = document.createTextNode(item);
+				        createA.setAttribute('href', "#");
+				        createA.setAttribute('rel', item);
+				        createA.setAttribute('onclick', "setSsid(this.rel);return false;");
+				        createA.appendChild(createAText);
+				     
+				     	var li = document.createElement('li');
+						li.appendChild(createA);
+						ul.appendChild(li);
+					});
+				}
+			}
+			
+			xhr.open("GET", "/get_ap_list", true);
+			xhr.send();
+		}
+		
+		function setSsid(ssid){
+			document.getElementById('ssid').value=ssid;
+		}
+	</script>
+</head>
+<body>
+	<div class="connect_panel">
+		<div class="ap_list">
+			<div class="update"><a href="#" onclick="refresh_ap();return false;">Update</a></div>
+			<ul id="ap_list">
+				
+			</ul>
+		</div>
+		
+		<div class="control">
+			<form method="POST" action="/ap_connect">
+				SSID: <input type="text" name="ssid" id="ssid" /><br />
+				Pass: <input type="text" name="password" id="password" /><br />
+				<input type="submit" value="Connect" />
+			</form>
+		</div>
+	</div>
+</body>
+</html>

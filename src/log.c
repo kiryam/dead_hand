@@ -8,7 +8,10 @@ static int scroll=0;
 static unsigned int current_item_active = 0;
 static unsigned int caption_index =0;
 
+// TODO REFACTOR it
 void Log_Message(char* str){
+	//return;
+
 	for( int i=0;i<MAX_LOG_ENTRIES; i++ ){
 		strcpy(log_entries[i].message,log_entries[i+1].message);
 		log_entries[i].count = log_entries[i+1].count;

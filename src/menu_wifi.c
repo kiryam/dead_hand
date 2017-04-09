@@ -3,11 +3,11 @@
 #include "main_menu.h"
 #include "wifi_status.h"
 #include "wifi_connect.h"
-#include "wifi_server.h"
 #include "message.pb.h"
 #include <pb_encode.h>
 #include <pb_decode.h>
 #include <stdbool.h>
+#include "server.h"
 
 const unsigned char img24x24 [] = {
 	0x00, 0x00, 0x00,
@@ -77,20 +77,67 @@ void func_wifi_disconnect() {
 }
 
 void func_wifi_server(){
-	Display_Set_Active_Controller(controller_wifi_server);
-	Display_Set_Active_Render(render_wifi_server);
-	WIFI_Server_Init();
+	if( server_status != 1 ){
+		if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
+			Log_Message("Server start ok");
+		}else{
+			Log_Message("Failed to start server");
+			return;
+		}
+	}
+	Display_Set_Active_Controller(controller_wifi_status);
+	Display_Set_Active_Render(render_wifi_status);
+
+	WIFI_Status_Init();
 }
 
+
+void func_start_ap(){
+	if (WIFI_Set_CIPSERVER(0, -1) ) {
+		Log_Message("CIPSERVER=0 ERROR");
+		//return;
+	}
+
+	if ( WIFI_Set_CIPMUX(0) ) {
+		Log_Message("CIPMUX=0 ERROR");
+		//return;
+	}
+	Log_Message("CIPMUX=0 OK");
+
+	if (WIFI_Set_CIPSERVER(0, -1) ) {
+		Log_Message("CIPSERVER=0 ERROR");
+		//return;
+	}
+	Log_Message("CIPSERVER=0 OK");
+
+	if (WIFI_Set_CWMODE(3) != 0 ) {
+		Log_Message("CWMODE ERROR");
+		return;
+	}
+	Log_Message("CWMODE=3 OK");
+
+	if (WIFI_Set_CWSAP("Dead_Hand", "", 5, 0) != 0){
+		Log_Message("AP point start err");
+		//message="Failed to run AP";
+		return;
+	}
+
+	Display_Set_Active_Controller(controller_wifi_status);
+	Display_Set_Active_Render(render_wifi_status);
+	WIFI_Status_Init();
+}
+
+
 void func_wifi_tcp_connect() {
+	// FIXME
 	int conn_ok = 0;
 	uint8_t answer[100] = {0};
 	WIFI_TCP_Connect("192.168.1.216", 7000); // TODO
 	WIFI_TCP_Send(0, "0",1);
 
-	int bytes_read = WIFI_TCP_Recv(answer); // TODO CHECK
+	//int bytes_read = WIFI_TCP_Recv(answer); // TODO CHECK
 
-	if ( bytes_read >= 0){
+	/*if ( bytes_read >= 0){
 		Hello hello_message = {42};
 		pb_istream_t stream = pb_istream_from_buffer(answer, bytes_read);
 
@@ -100,6 +147,7 @@ void func_wifi_tcp_connect() {
 		}
 		conn_ok=0;
 	}
+	*/
 
 	WIFI_TCP_Disconnect(0);
 }
@@ -111,6 +159,7 @@ void Menu_Wifi_Init(){
 	Menu_Add_Item("Connect", func_wifi_connect);
 	Menu_Add_Item("Disconnect", func_wifi_disconnect);
 	Menu_Add_Item("Connect TCP", func_wifi_tcp_connect);
+	Menu_Add_Item("Start AP", func_start_ap);
 	Menu_Add_Item("Server Start", func_wifi_server);
 }
 
