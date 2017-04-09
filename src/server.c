@@ -175,7 +175,7 @@ void TIM7_IRQHandler() {
 					}
 					bytes_pending=0;
 				}
-				sleepMs(1000);
+				sleepMs(2000);
 			}
 			free_c(data_item);
 		}

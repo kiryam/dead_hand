@@ -300,7 +300,7 @@ void MY_USART_Init(){
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 20;
+	base_timer.TIM_Period = 1;
 	TIM_TimeBaseInit(TIM6, &base_timer);
 
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
@@ -728,7 +728,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 	char command[20] = {0};
 	sprintf(command, "AT+CIPSEND=%d,%d\r\n", conn_id, bytes_count);
 
-	int retry_remained = 10;
+	int retry_remained = 3;
 	is_welcome_byte = 0;
 	is_new_line = 0;
 
@@ -771,6 +771,10 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 			while( (retry_remained--) > 0  ){
 				if (WIFI_Read_Line(answer, 100, 800000) != 0){
 					continue;
+				}
+
+				if( strncmp(answer, "Recv", 4) == 0 ){
+					return 0;
 				}
 
 				if (strncmp(answer, "\r\n", 2) == 0){
