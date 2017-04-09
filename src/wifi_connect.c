@@ -1,6 +1,7 @@
 #include "wifi_connect.h"
 #include "display.h"
 #include "wifi_status.h"
+#include "wifi.h"
 
 static int point_list_err = 0;
 
@@ -24,27 +25,33 @@ void func_connect(){
 	}
 }
 
-void func_parse_point(char* line){
-	WIFI_Point point;
-	if (WIFI_Parse_Point_Answer(line, &point) == 0 ){
-		Menu_Add_Item_Param(point.name, func_connect, point.name);
-		Log_Message(line);
-	}
-	return;
-}
-
 void retreive_point_list(){
-	add_newline_callback(func_parse_point);
-	point_list_err = WIFI_Retreive_List();
+	WIFI_List_Result* result = malloc_c(sizeof(WIFI_List_Result));
+	point_list_err = WIFI_Retreive_List(result);
+
+	if( point_list_err == 0 ){
+		for(int i=0; i<result->found;i++){
+			WIFI_Point* point = result->points[i];
+			Menu_Add_Item_Param(point->name, func_connect, point->name);
+		}
+	}
+
+	WIFI_List_Result_Free(result);
 }
 
 void WIFI_Connect_Init() {
 	Menu_Init();
+
+	char* name = config_get("name");
+	if( name[0] != '\0'){
+		Menu_Add_Item_Param(name, func_connect, config_get("password"));
+	}
+
 	retreive_point_list();
 }
 
 void WIFI_Connect_Unregister(){
-	remove_newline_callback(func_parse_point);
+	//remove_newline_callback(func_parse_point);
 	Menu_Free();
 }
 

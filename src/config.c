@@ -3,6 +3,7 @@
 
 typedef struct {
 	uint8_t is_initialized;
+	char name[40];
 	char password[40];
 } Config_Storage;
 
@@ -15,6 +16,11 @@ int config_set(char* key, char* value){
 		storage->is_initialized = 1;
 		strcpy(storage->password, value);
 		return 0;
+	}else if( strcmp(key, "name") == 0 ){
+		Config_Storage* storage = CONFIG_STORAGE;
+		storage->is_initialized = 1;
+		strcpy(storage->name, value);
+		return 0;
 	}
 	return 1;
 }
@@ -26,6 +32,12 @@ char* config_get(char* key){
 			return "default_password";
 		}
 		return storage->password;
+	}else if (strcmp(key, "name") == 0){
+		Config_Storage* storage = CONFIG_STORAGE;
+		if ( storage->is_initialized != 1 ){
+			return "";
+		}
+		return storage->name;
 	}
 	return NULL;
 }

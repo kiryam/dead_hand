@@ -8,6 +8,9 @@ Request* request_init(char* raw_data){
 	Request* request = (Request*)malloc_c(sizeof(Request));
 	request->path[0] = '\0';
 	request->proto[0] = '\0';
+	request->headers_count = 0;
+	request->data_count = 0;
+	request->type =0;
 
 	if( request_parse(request, raw_data) != 0){
 		Log_Message("Parse header error");
@@ -30,11 +33,9 @@ int request_parse(Request* request, char* raw_header){
 	}
 
 	if( strncmp("POST", ptr, 4) == 0 ){
-		ptr = &ptr[4];
+		ptr = &ptr[5];
 		request->type = POST;
 	}
-
-	request->headers_count=0;
 
 	// Read path
 	while( ptr[path_cur] != ' ' && path_cur < REQUEST_MAX_PATH_LEN  ){
@@ -66,8 +67,6 @@ int request_parse(Request* request, char* raw_header){
 		path_cur = 0;
 	}
 
-/*
-
 	// Read headers
 	int header_parsed=0;
 	int header_parsed_done=0;
@@ -89,11 +88,11 @@ int request_parse(Request* request, char* raw_header){
 
 			// key
 			token = strtok(line, search);
-			strcpy(header->key, token);
+			strncpy(header->key, token, REQUEST_MAX_HEADER_KEY);
 
 			// value
 			token = strtok(NULL, search);
-			strcpy(header->value, token);
+			strncpy(header->value, token, REQUEST_MAX_HEADER_VALUE);
 
 			request->headers[header_parsed++] = header;
 
@@ -106,9 +105,48 @@ int request_parse(Request* request, char* raw_header){
 			}
 		}
 	}
-	*/
 
-	//Log_Message(ptr);
+	if( ptr[1] == '\0' ){
+		return 0; // no data
+	}
+
+	//parse data
+	if( strncmp(ptr, "\r\n", 2)==0 ){
+		ptr = &ptr[2];
+		int data_parsed=0;
+		int data_parsed_done=0;
+		while (data_parsed < REQUEST_MAX_DATA_COUNT && data_parsed_done == 0){
+			while( ptr[path_cur] != '\0' && ptr[path_cur] != '&'  && path_cur < REQUEST_MAX_DATA_RAW_KV  ){
+				path_cur++;
+			}
+
+			Request_Data* data = malloc_c(sizeof(Request_Data));
+			char *token;
+			char line[REQUEST_MAX_DATA_RAW_KV]={0};
+			char *search = "=";
+			strncpy(line, ptr, path_cur);
+
+			// key
+			token = strtok(line, search);
+			strncpy(data->key, token, REQUEST_DATA_KEY_LEN);
+
+			// value
+			token = strtok(NULL, search);
+			strncpy(data->value, token, REQUEST_DATA_VALUE_LEN);
+
+			request->data[data_parsed++] = data;
+
+			if(ptr[path_cur] == '\0'){
+				request->data_count = data_parsed;
+				data_parsed_done = 1;
+			}else{
+				ptr = &ptr[path_cur+1];
+				path_cur = 0;
+			}
+		}
+
+		return 0;
+	}
 
 	return 0;
 }
@@ -119,5 +157,23 @@ void request_free(Request* request){
 		free_c(request->headers[i]);
 	}
 
+	for(int i=0;i<request->data_count;i++){
+		free_c(request->data[i]);
+	}
+
+
 	free_c(request);
+}
+
+
+int request_get_post_field(Request* request, char* field_name, char* field_value){
+	for(int i=0; i< request->data_count;i++){
+		Request_Data* data= request->data[i];
+		if( strcmp(data->key, field_name) == 0 ){
+			strncpy(field_value, data->value, REQUEST_DATA_VALUE_LEN);
+			return 0;
+		}
+	}
+
+	return 1;
 }

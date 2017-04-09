@@ -3,7 +3,7 @@
 #include <string.h>
 #include "tlsf.h"
 
-#define POOL_SIZE 1024 * 100
+#define POOL_SIZE 1024 * 30
 static char pool[POOL_SIZE];
 
 void sleepMs(unsigned int e) {
