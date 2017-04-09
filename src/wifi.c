@@ -300,7 +300,7 @@ void MY_USART_Init(){
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 20;
+	base_timer.TIM_Period = 1;
 	TIM_TimeBaseInit(TIM6, &base_timer);
 
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
@@ -628,13 +628,6 @@ int WIFI_Parse_Point_Answer(char* answer, WIFI_Point *point) {
 
 int WIFI_Retreive_List(WIFI_List_Result* result){
 	result->found =0;
-	//if (WIFI_Disconnect() != 0) {
-	//	return 1;
-	//}
-
-	//if (WIFI_Set_CWMODE(1) != 0) {
-	//	return 1;
-	//}
 
 	is_new_line = 0;
 	WIFI_Send_Command("AT+CWLAP\r\n", 0);
@@ -735,7 +728,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 	char command[20] = {0};
 	sprintf(command, "AT+CIPSEND=%d,%d\r\n", conn_id, bytes_count);
 
-	int retry_remained = 10;
+	int retry_remained = 3;
 	is_welcome_byte = 0;
 	is_new_line = 0;
 
@@ -749,7 +742,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 #endif
 
 	if (strncmp(answer, "\r\n", 2) != 0) {
-		WIFI_Read_Line(answer, 100, 1600000);
+		WIFI_Read_Line(answer, 100, 400000);
 
 		if (strncmp(answer, "OK", 2) != 0) {
 			Log_Message("Not OK");
@@ -757,7 +750,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 		}
 	}
 
-	if( wait_welcome_byte(800000) != 0 ){
+	if( wait_welcome_byte(200000) != 0 ){
 		Log_Message("No welcome message");
 		//return 1;
 	}
@@ -778,6 +771,10 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 			while( (retry_remained--) > 0  ){
 				if (WIFI_Read_Line(answer, 100, 800000) != 0){
 					continue;
+				}
+
+				if( strncmp(answer, "Recv", 4) == 0 ){
+					return 0;
 				}
 
 				if (strncmp(answer, "\r\n", 2) == 0){
