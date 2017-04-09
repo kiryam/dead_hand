@@ -168,13 +168,14 @@ void TIM7_IRQHandler() {
 					}
 					response_ptr = &response_ptr[MAX_PACKET_LEN];
 					bytes_pending -= MAX_PACKET_LEN;
-					sleepMs(1000);
+
 				} else {
 					if (WIFI_TCP_Send(data_item->connect_id, response_ptr, bytes_pending) != 0 ){
 						Log_Message("Send data failed");
 					}
 					bytes_pending=0;
 				}
+				sleepMs(1000);
 			}
 			free_c(data_item);
 		}
