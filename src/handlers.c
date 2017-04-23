@@ -7,6 +7,44 @@
 #include "wifi_status.h"
 #include "relay.h"
 
+int handle_request(Request* request, char* response){
+	uint8_t response_page[RESPONSE_MAX_LEN] = {0};
+
+	if (request->path[0] == '/' && request->path[1] == '\0' ) {
+		handler_index(request, response_page);
+	} else if( strcmp("/manage", request->path) == 0 ){
+		handler_manage(request, response_page);
+	} else if( strncmp("/tcl", request->path, 4) == 0 ){
+		handler_tcl(request, response_page);
+	}else if(strncmp("/memory", request->path, 7) ==0){
+		handler_memory(request, response_page);
+	} else if(strncmp("/metrics", request->path, 8) ==0){
+		handler_metrics(request, response_page);
+	} else if(strcmp("/connect", request->path) ==0){
+		handler_connect(request, response_page);
+	} else if(strcmp("/get_ap_list", request->path) ==0){
+		handler_get_ap_list(request, response_page);
+	} else if(strcmp("/ap_connect", request->path) == 0){
+		handler_ap_connect(request, response_page);
+	} else if(strcmp("/relay_on", request->path) == 0){
+		handler_relay_on(request, response_page);
+	} else if(strcmp("/relay_off", request->path) == 0){
+		handler_relay_off(request, response_page);
+	} else if(strcmp("/restore", request->path) == 0){
+		handler_restore(request, response_page);
+	} else if(strncmp("/favicon.ico", request->path, 11) == 0) {
+		handler_favicon(request, response_page);
+	} else if(strcmp("/style.css", request->path) == 0) {
+		handler_style(request, response_page);
+	} else if(strcmp("/reset", request->path) == 0) {
+		NVIC_SystemReset();
+	} else {
+		handler_404(request, response_page);
+	}
+
+	return sprintf(response, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\n\r\n%s", strlen(response_page), response_page);
+}
+
 int page_index(char* page_index, char* content){
 	sprintf(page_index, static_template_page, static_style, static_javascript, content);
 	return 0;
@@ -27,6 +65,10 @@ void handler_connect(Request* request,  char* response){
 
 void handler_get_ap_list(Request* request,  char* response){
 	WIFI_List_Result* result = malloc_c(sizeof(WIFI_List_Result));
+	if (result == NULL){
+		return;
+	}
+
 	int point_list_err = WIFI_Retreive_List(result);
 
 	if( point_list_err == 0 ){
@@ -71,7 +113,7 @@ void handler_ap_connect(Request* request,  char* response){
 }
 
 void handler_manage(Request* request, char* response){
-	char manage_response[1024] = {0};
+	char manage_response[4096] = {0};
 	if( RELAY_STATE == RELAY_ON ){
 		sprintf(manage_response, static_page_manage,"<a href=\"/relay_on\"><button type=\"button\" class=\"btn btn-default\">On</button></a><a href=\"/relay_off\"><button type=\"button\" class=\"btn btn-success\">Off</button></a>");
 	}else{
@@ -79,6 +121,32 @@ void handler_manage(Request* request, char* response){
 	}
 	page_index(response, manage_response);
 }
+
+void handler_tcl(Request* request, char* response){
+	if( request->type == POST ) {
+		char s[4096] = {0};
+		if (request_get_post_field(request, "code", s) != 0){
+			sprintf(response, "CODE_FIELD_NOT_FOUND");
+			return;
+		}
+
+		/*
+		struct tcl tcl;
+		tcl_init(&tcl);
+
+		if (tcl_eval(&tcl, s, strlen(s)) != FERROR) {
+		    sprintf(response, "%.*s\n", tcl_length(tcl.result), tcl_string(tcl.result));
+		    tcl_destroy(&tcl);
+		    return;
+		}
+		tcl_destroy(&tcl);
+		*/
+		sprintf(response, "ERROR");
+		return;
+	}
+	page_index(response, static_page_tcl);
+}
+
 
 
 void handler_relay_on(Request* request, char* response){

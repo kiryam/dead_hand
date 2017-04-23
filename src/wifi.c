@@ -3,7 +3,9 @@
 #include "log.h"
 #include "message_queue.h"
 #include "server.h"
+#include "ipd_parser.h"
 
+//#define LOG_ESP_MESSAGES
 
 int wifi_init_ok = 0;
 static char wifi_buff[MESSAGE_COMMAND_SIZE] = {0};
@@ -12,24 +14,16 @@ int is_new_line=0;
 int is_welcome_byte=0;
 
 static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT] = {0};
-static callback data_handlers[MAX_DATA_CALLBACK_COUNT] = {0};
 
 static int recv_message_data_started=0;
+#define RECV_MESSAGE_CONN_ID_LEN 4
+#define RECV_MESSAGE_SIZE_TMP_LEN 8
 
-static int recv_message_conn_id_readed=0;
-static char recv_message_conn_id_tmp[4] = {0};
-static int recv_message_conn_id =-1;
-static int recv_message_size=-1;
-static char recv_message_size_tmp[8] = {0};
-static int recv_message_size_cur_pos=0;
-static int recv_message_size_readed=0;
-static int recv_message_header_readed=0;
-static int recv_message_data_bytes_read=0;
-static char recv_message_buff[MESSAGE_DATA_MAX_SIZE] = {0};
-static int packed_bytes_readed=0;
-static int recv_message_conn_id_cur_pos=0;
+static ipd_parser* parser;
 
 #define PROTOCOL_LOG_MAX_LENGTH 1024*1
+
+//#define PROTO_LOG
 
 #ifdef PROTO_LOG
 char protocol_log[PROTOCOL_LOG_MAX_LENGTH] = {0};
@@ -56,6 +50,7 @@ int add_newline_callback(callback f){
 		}
 	}
 
+	Log_Message("Failed to add newline callback");
 	return 1;
 }
 
@@ -67,28 +62,7 @@ int remove_newline_callback(callback f){
 		}
 	}
 
-	return 1;
-}
-
-int add_data_callback(callback f){
-	for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
-		if (data_handlers[i] == NULL){
-			data_handlers[i] = f;
-			return 0;
-		}
-	}
-
-	return 1;
-}
-
-int remove_data_callback(callback f){
-	for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
-		if (data_handlers[i] == f){
-			data_handlers[i] = NULL;
-			return 0;
-		}
-	}
-
+	Log_Message("Failed to remove newline callback");
 	return 1;
 }
 
@@ -117,6 +91,10 @@ void TIM6_DAC_IRQHandler() {
 		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
 		message_command* msg = message_queue_get();
 		if( msg != NULL ){
+#ifdef LOG_ESP_MESSAGES
+			Log_Message(msg->line);
+#endif
+
 			if( msg->line[0] != '\0' ){
 				for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
 					if (new_line_handlers[i] != NULL){
@@ -126,131 +104,76 @@ void TIM6_DAC_IRQHandler() {
 			}
 			free_c(msg);
 		}
-
-		message_data* msg_data = message_data_queue_get();
-		if( msg_data ){
-			for(int i=0; i<MAX_DATA_CALLBACK_COUNT; i++){
-				if (data_handlers[i] != NULL){
-					data_handlers[i](msg_data);
-				}
-			}
-			free_c(msg_data);
-		}
   }
-}
-
-int parse_ipd_packet(char cur_byte) {
-	if (!recv_message_data_started) {
-		return 0;
-	}
-
-	packed_bytes_readed++;
-
-	if( recv_message_conn_id_readed==0){ //IPD,10,
-		if(  packed_bytes_readed > 5 ) {
-			recv_message_data_started = 0;
-			Log_Message("Failed to read +IPD packet");
-			return 1;
-		}
-
-		if(cur_byte == ','){
-			recv_message_conn_id = atoi(recv_message_conn_id_tmp);
-			recv_message_conn_id_readed = 1;
-		} else {
-			recv_message_conn_id_tmp[recv_message_conn_id_cur_pos++] = cur_byte;
-		}
-
-		return 1;
-	}
-
-	if ( recv_message_conn_id_readed && recv_message_size_readed == 0 ){ //IPD,10,1024:
-		if(  packed_bytes_readed > 10 ) {
-			recv_message_data_started = 0;
-			Log_Message("Failed to read +IPD packet");
-			return 1;
-		}
-		if(cur_byte == ':'){
-			recv_message_size = atoi(recv_message_size_tmp);
-			if(recv_message_size >= MESSAGE_DATA_MAX_SIZE){
-				recv_message_data_started = 0;
-				Log_Message("Message too long");
-				return 1;
-			}else {
-				recv_message_size_readed = 1;
-			}
-		} else {
-			recv_message_size_tmp[recv_message_size_cur_pos++] = cur_byte;
-		}
-
-		return 1;
-	}
-
-	if ( recv_message_conn_id_readed && recv_message_size_readed && packed_bytes_readed ){ //IPD,10,1024:[A-Z]{MESSAGE_DATA_MAX_SIZE}
-		if(  packed_bytes_readed > (MESSAGE_DATA_MAX_SIZE+10) ) {
-			recv_message_data_started = 0;
-			Log_Message("Failed to read +IPD packet");
-			return 1;
-		}
-
-		recv_message_buff[recv_message_data_bytes_read++] = cur_byte;
-
-		if ( recv_message_data_bytes_read == recv_message_size) {
-			recv_message_data_started = 0;
-			message_data_queue_add(recv_message_conn_id, recv_message_buff);
-			Log_Message(recv_message_buff);
-			wifi_buff_pos=0;
-			return 0;
-			// message fully readed continue parse string
-		}
-
-		return 1;
-	}
-
-	recv_message_data_started=0;
-	Log_Message("Failed to read +IPD packet");
-	return 1;
 }
 
 void USART1_IRQHandler(void) {
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) == SET) {
 		USART_ClearITPendingBit(USART1, USART_IT_RXNE);
 
-		wifi_buff[wifi_buff_pos] = USART_ReceiveData(USART1);
+		char byte = USART_ReceiveData(USART1);
 
-#ifdef PROTO_LOG
-		protocol_log_byte(wifi_buff[wifi_buff_pos], DIR_IN);
-#endif
+		if( recv_message_data_started == 1){
+			ipd_parser_execute(parser, byte);
 
-		if( wifi_buff_pos == 0 && wifi_buff[wifi_buff_pos] == '>' ){
-			is_welcome_byte = 1;
-		} else if( parse_ipd_packet(wifi_buff[wifi_buff_pos] ) ) {
-			wifi_buff_pos=0;
-		} else if(wifi_buff[wifi_buff_pos] == '\n' ){
-			is_new_line = 1;
-			wifi_buff[wifi_buff_pos+1] = '\0';
-			message_queue_add(wifi_buff);
-			wifi_buff_pos=0;
-		} else {
-			wifi_buff_pos++;
+			if ( parser->errno != OK ){
+				ipd_parser_free(parser);
+				Log_Message("IPDparse error ");
+				recv_message_data_started = 0;
+				wifi_buff_pos = 0;
+				return;
+			} else if ( parser->state == s_message_done ){
+				if ( message_data_queue_add(parser) != 0 ) {
+					ipd_parser_free(parser);
+				}
+				recv_message_data_started = 0;
+				wifi_buff_pos = 0;
+				return;
+			}
+			//Log_Message("a");
+
+			return;
+
+			//done:
+
+			//	return;
 		}
 
 		if ( wifi_buff_pos >= MESSAGE_COMMAND_SIZE ){
 			wifi_buff_pos = 0;
+			Log_Message("Maximum buff length exited");
 		}
 
-		if( wifi_buff[0] == '+' && strncmp(wifi_buff, "+IPD,", 5) == 0 ){
-			if( recv_message_data_started == 0) {
-				recv_message_data_started=1;
-				recv_message_conn_id_readed=0;
-				recv_message_header_readed=0;
-				recv_message_size_readed = 0;
-				recv_message_data_bytes_read =0;
-				recv_message_size_cur_pos=0;
-				recv_message_conn_id_cur_pos=0;
-				packed_bytes_readed=0;
-				recv_message_size_tmp[0] = '\0';
-			}
+
+		if( wifi_buff_pos == 0 && byte == '>' ){
+			is_welcome_byte = 1;
+			return;
 		}
+
+		wifi_buff[wifi_buff_pos++] = byte;
+
+		if( byte == '\n' ){
+			is_new_line = 1;
+			wifi_buff[wifi_buff_pos] = '\0';
+			message_queue_add(wifi_buff);
+			wifi_buff_pos=0;
+
+			return;
+		}
+
+		if( strncmp(wifi_buff, "+IPD,", 5) == 0 ){
+			recv_message_data_started = 1;
+			parser = malloc_c(sizeof(ipd_parser));
+			if (parser == NULL){
+				Log_Message("Out of memory");
+				return;
+			}
+			ipd_parser_init(parser);
+		}
+
+#ifdef PROTO_LOG
+		protocol_log_byte(byte, DIR_IN);
+#endif
 	}
 }
 
@@ -309,12 +232,16 @@ void MY_USART_Init(){
 	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
 	NVIC_EnableIRQ(TIM6_DAC_IRQn);
 	NVIC_SetPriority(TIM6_DAC_IRQn, 54);
+
+
 }
 
 // TODO REMOVE
 // DEPRECATED
 void WIFI_Send_Command(char* command, uint8_t timeout){
-	//Log_Message(command);
+#ifdef LOG_ESP_MESSAGES
+	Log_Message(command);
+#endif
 	// TODO implement timeout
 	for (unsigned int i=0; i<strlen(command); i++){
 		USART_SendData(USART1, command[i]);
@@ -657,6 +584,10 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 			continue;
 		} else {
 			WIFI_Point* point = malloc_c(sizeof(WIFI_Point));
+			if (point ==NULL){
+				Log_Message("Out of memory");
+				continue;
+			}
 
 			if ( WIFI_Parse_Point_Answer(answer, point) == 0 ){
 				Log_Message("Parsed ok");
@@ -743,15 +674,16 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 #endif
 
 	if (strncmp(answer, "\r\n", 2) != 0) {
-		WIFI_Read_Line(answer, 100, 400000);
+		WIFI_Read_Line(answer, 100, 200000);
 
 		if (strncmp(answer, "OK", 2) != 0) {
 			Log_Message("Not OK");
+			Log_Message(answer);
 			//return 1;
 		}
 	}
 
-	if( wait_welcome_byte(200000) != 0 ){
+	if( wait_welcome_byte(400000) != 0 ){
 		Log_Message("No welcome message");
 		//return 1;
 	}

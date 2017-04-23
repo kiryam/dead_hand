@@ -68,7 +68,7 @@
 #endif
 
 #ifndef USE_SBRK
-#define	USE_SBRK 	(0)
+#define	USE_SBRK 	(1)
 #endif
 
 

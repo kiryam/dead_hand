@@ -21,6 +21,10 @@ void Menu_Add_Item( char* caption,  functiontype fnc ){
 }
 void Menu_Add_Item_Param( char* caption,  functiontype fnc, char* param1 ){
 	MENU_List_Item *item = malloc_c(sizeof(MENU_List_Item));
+	if (item == NULL){
+		Log_Message("Out of memory");
+		return;
+	}
 	strcpy(item->caption, caption);
 	strcpy(item->param1, param1);
 	item->is_selected = listElements.count > 0 ? 0 : 1;

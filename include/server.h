@@ -7,9 +7,9 @@ extern "C" {
 
 #include "stm32f2xx_conf.h"
 
-#define MAX_PENDING_CONNETION 10
+
 #define MAX_PENDING_DISCONNECTION 10
-#define MAX_PENDING_DATA 4
+
 #define MAX_DATA_SIZE 1024
 
 #define MAX_PACKET_LEN 1024

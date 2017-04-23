@@ -1,7 +1,12 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include "server.h"
 #include "request.h"
 #include "message_queue.h"
+#include "ipd_parser.h"
+#include "handlers.h"
+
+
 #include "wifi.h"
 
 int server_status = -1;
@@ -79,7 +84,7 @@ void WIFI_Server_Timer_Init() {
 	TIM_TimeBaseStructInit(&base_timer);
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 50;
+	base_timer.TIM_Period = 100;
 
 	TIM_TimeBaseInit(TIM7, &base_timer);
 
@@ -106,80 +111,56 @@ void TIM7_IRQHandler() {
 			return;
 		}
 
-		Data_Item* data_item = pending_data_pop();
-		if( data_item != NULL ){
-			Request* request = request_init(data_item->data);
+		ipd_parser* message = (ipd_parser*)message_data_queue_get();
 
-			if( request == NULL ) {
-				free_c(data_item);
-				Log_Message("Request init fail");
+		if( message != NULL ){
+			int conn_id = message->conn_id;
+			Request request = {0};
+
+			if( request_parse(&request, message->message, message->message_size) != 0){
+				Log_Message("Parse header error");
+				ipd_parser_free(message);
 				return;
 			}
 
-			char response_page[RESPONSE_MAX_LEN] = {0};
-			if (request->path[0] == '/' && request->path[1] == '\0' ) {
-				handler_index(request, response_page);
-			} else if( strcmp("/manage", request->path) == 0 ){
-				handler_manage(request, response_page);
-			}
+			ipd_parser_free(message);
 
-#ifdef PROTO_LOG
-			else if(strncmp("/get_protocol_log", request->path, 18) ==0 ){
-				handler_get_protocol_log(request, response_page);
-			}
-#endif
-			else if(strncmp("/memory", request->path, 7) ==0){
-				handler_memory(request, response_page);
-			} else if(strncmp("/metrics", request->path, 8) ==0){
-				handler_metrics(request, response_page);
-			} else if(strcmp("/connect", request->path) ==0){
-				handler_connect(request, response_page);
-			} else if(strcmp("/get_ap_list", request->path) ==0){
-				handler_get_ap_list(request, response_page);
-			} else if(strcmp("/ap_connect", request->path) == 0){
-				handler_ap_connect(request, response_page);
-			} else if(strcmp("/relay_on", request->path) == 0){
-				handler_relay_on(request, response_page);
-			} else if(strcmp("/relay_off", request->path) == 0){
-				handler_relay_off(request, response_page);
-			} else if(strcmp("/restore", request->path) == 0){
-				handler_restore(request, response_page);
-			} else if(strncmp("/favicon.ico", request->path, 11) == 0) {
-				handler_favicon(request, response_page);
-			} else if(strcmp("/style.css", request->path) == 0) {
-				handler_style(request, response_page);
-			} else {
-				handler_404(request, response_page);
-			}
+			Log_Message("OK");
 
-			request_free(request);
-			uint8_t response[RESPONSE_MAX_LEN+512] = {0};
-			int bytes_pending = sprintf(response, "HTTP/1.0 200 OK\r\nContent-Type: text/html\r\nContent-Length: %d\n\r\n%s", strlen(response_page), response_page);
+			char response[RESPONSE_MAX_LEN+512] = {0};
+			int bytes_pending = handle_request(&request, response);
+			request_free(&request);
 
 			char* response_ptr = response;
 
-			uint8_t tmp_buff[MAX_PACKET_LEN+1] ={0};
+			char tmp_log[128] = {0};
+
 			while (bytes_pending > 0){
 				if( bytes_pending > MAX_PACKET_LEN ){
-					strncpy(tmp_buff, response_ptr, MAX_PACKET_LEN);
-					if (WIFI_TCP_Send(data_item->connect_id, tmp_buff, MAX_PACKET_LEN) != 0 ){
+					if (WIFI_TCP_Send(conn_id, (uint8_t*)response_ptr, MAX_PACKET_LEN) != 0 ){
 						bytes_pending=0;
 						Log_Message("Send data failed");
 					}
+
+					sprintf(tmp_log, "Sent %d bytes  (pending: %d)", MAX_PACKET_LEN, bytes_pending);
+					Log_Message(tmp_log);
+
 					response_ptr = &response_ptr[MAX_PACKET_LEN];
 					bytes_pending -= MAX_PACKET_LEN;
-
 				} else {
-					if (WIFI_TCP_Send(data_item->connect_id, response_ptr, bytes_pending) != 0 ){
+					if (WIFI_TCP_Send(conn_id, (uint8_t*)response_ptr, bytes_pending) != 0 ){
 						Log_Message("Send data failed");
 					}
+					sprintf(tmp_log, "Sent %d bytes", bytes_pending);
+					Log_Message(tmp_log);
+
 					bytes_pending=0;
 				}
 				sleepMs(2000);
 			}
-			free_c(data_item);
+			Log_Message("Send done");
 		}
-  }
+    }
 }
 
 void func_wifi_on_new_line(char* line){
@@ -198,22 +179,11 @@ void func_wifi_on_new_line(char* line){
 	}
 }
 
-void func_wifi_ondata(message_data* msg){
-	Data_Item* item = malloc_c(sizeof(Data_Item));
-
-	item->connect_id = msg->target;
-	strncpy(item->data, msg->line, MAX_DATA_SIZE);
-	pending_data_push(item);
-}
-
 
 int WIFI_Server_Start(int port){
 	WIFI_Server_Timer_Init();
-	remove_newline_callback(func_wifi_on_new_line);
-	remove_data_callback(func_wifi_ondata);
-
-	add_newline_callback(func_wifi_on_new_line);
-	add_data_callback(func_wifi_ondata);
+	remove_newline_callback((callback)func_wifi_on_new_line);
+	add_newline_callback((callback)func_wifi_on_new_line);
 
 	if ( WIFI_Set_CIPSERVER(0, 0) ){
 		Log_Message("CIPSERVER=0 ERROR");

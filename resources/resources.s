@@ -39,3 +39,11 @@ static_page_manage:
  .byte 0
  .size static_page_manage, .-static_page_manage
 
+  .section ".rodata"
+ .globl static_page_tcl
+ .type static_page_tcl, STT_OBJECT
+static_page_tcl:
+ .incbin "page_tcl.html"
+ .byte 0
+ .size static_page_tcl, .-static_page_tcl
+

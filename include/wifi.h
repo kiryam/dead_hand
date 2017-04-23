@@ -11,7 +11,7 @@ extern "C" {
 
 #define ESP_DISABLE_ECHO
 
-#define MAX_NEWLINE_CALLBACK_COUNT 10
+#define MAX_NEWLINE_CALLBACK_COUNT 4
 #define MAX_DATA_CALLBACK_COUNT 5
 
 #define MAX_POINTS_COUNT 50
@@ -51,6 +51,8 @@ int WIFI_Read_Line_Sync(char* answer,uint8_t maxlen, int timeout);
 int WIFI_Read_Byte(uint16_t* ch, int timeout);
 extern int is_new_line;
 
+int add_newline_callback(callback f);
+int remove_newline_callback(callback f);
 
 #ifdef __cplusplus
 }

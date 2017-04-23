@@ -27,6 +27,10 @@ void func_connect(){
 
 void retreive_point_list(){
 	WIFI_List_Result* result = malloc_c(sizeof(WIFI_List_Result));
+	if(result == NULL){
+		Log_Message("Out of memory");
+		return;
+	}
 	point_list_err = WIFI_Retreive_List(result);
 
 	if( point_list_err == 0 ){
