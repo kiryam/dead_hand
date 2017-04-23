@@ -2,7 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define POOL_SIZE 1024 * 60
+#define POOL_SIZE 1024 * 20
 
 #define USE_UMM_MALLOC
 

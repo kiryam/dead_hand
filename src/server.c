@@ -125,8 +125,6 @@ void TIM7_IRQHandler() {
 
 			ipd_parser_free(message);
 
-			Log_Message("OK");
-
 			char response[RESPONSE_MAX_LEN+512] = {0};
 			int bytes_pending = handle_request(&request, response);
 			request_free(&request);
@@ -156,7 +154,6 @@ void TIM7_IRQHandler() {
 
 					bytes_pending=0;
 				}
-				sleepMs(2000);
 			}
 			Log_Message("Send done");
 		}

@@ -660,79 +660,58 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 	char command[20] = {0};
 	sprintf(command, "AT+CIPSEND=%d,%d\r\n", conn_id, bytes_count);
 
-	int retry_remained = 3;
+	int retry_remained = 8;
 	is_welcome_byte = 0;
 	is_new_line = 0;
 
-	WIFI_Send_Command(command,0);
-
-	WIFI_Read_Line(answer, 100, 200000);
-	WIFI_Read_Line(answer, 100, 200000);
-
-#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer, 100, 800000);
-#endif
-
-	if (strncmp(answer, "\r\n", 2) != 0) {
-		WIFI_Read_Line(answer, 100, 200000);
-
-		if (strncmp(answer, "OK", 2) != 0) {
-			Log_Message("Not OK");
-			Log_Message(answer);
-			//return 1;
+	step1:
+		if (retry_remained <= 0){
+			Log_Message("Retry number of attempts ended");
+			return 1;
 		}
+
+		WIFI_Exec_Cmd_Get_Answer(command, answer);
+
+
+	if( strncmp(answer, "busy", 4) == 0 ){
+		Log_Message("Busy.. going to step1");
+		sleepMs(100);
+		retry_remained--;
+		goto step1;
+	}
+
+	if (strncmp(answer, "OK", 2) != 0) {
+		Log_Message("Not OK");
+		Log_Message(answer);
+		return 1;
 	}
 
 	if( wait_welcome_byte(400000) != 0 ){
 		Log_Message("No welcome message");
-		//return 1;
+		return 1;
 	}
 
 	WIFI_Send_Bytes(data, bytes_count, 0);
-	WIFI_Send_Command("\r\n", 0);
 
-	WIFI_Read_Line(answer, 100, 800000);  // /r/n
+	WIFI_Exec_Cmd_Get_Answer("\r\n", answer);
 
-#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer, 100, 800000);
-#endif
+	if (WIFI_Read_Line(answer, 100, 200000)){
+		return 1;
+	}
 
-	if( strncmp(&answer[1], "\r\n", 2) == 0 ){
-		WIFI_Read_Line(answer, 100, 800000);
-
-		if( strncmp(answer, "busy", 4) == 0 ){
-			while( (retry_remained--) > 0  ){
-				if (WIFI_Read_Line(answer, 100, 800000) != 0){
-					continue;
-				}
-
-				if( strncmp(answer, "Recv", 4) == 0 ){
-					return 0;
-				}
-
-				if (strncmp(answer, "\r\n", 2) == 0){
-					if (WIFI_Read_Line(answer, 100, 800000) == 0){
-						return 0;
-					}
-					//Recv 93 bytes\r\n
-
-				}
-
-				if (strncmp(answer, "SEND OK", 7) == 0){
-					return 0;
-				}
-			}
+	step2:
+		if (WIFI_Read_Line(answer, 100, 200000)){
 			return 1;
 		}
-	}
 
-	if (WIFI_Read_Line(answer, 100, 800000)){
-		return 1;
-	}
-	//Recv 93 bytes\r\n
+	char validate[32] = {0};
+	sprintf(validate, "Recv %d bytes\r\n", bytes_count);
 
-	if (WIFI_Read_Line(answer, 100, 800000)){
-		return 1;
+	if ( strncmp(validate, answer, 32) != 0){
+		Log_Message("=========\r\nValidate failed");
+		Log_Message(answer);
+		Log_Message("=========");
+		goto step2;
 	}
 
 	return 0;

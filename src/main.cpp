@@ -32,22 +32,20 @@ void BCKP_Init(){
 	PWR_BackupRegulatorCmd(ENABLE);
 }
 
-
-int
-main(int argc, char* argv[]) {
+int main(int argc, char* argv[]) {
 	memory_init();
 	BCKP_Init();
 
+#ifdef WATCHDOG_ENABLED
 	IWDG_WriteAccessCmd(IWDG_WriteAccess_Enable);
 	IWDG_SetPrescaler(IWDG_Prescaler_128);
 	IWDG_SetReload(1000);
 	IWDG_ReloadCounter();
-	//IWDG_Enable(); // TODO enable on release
-
+	IWDG_Enable(); // TODO enable on release
 	Log_Message("Watchdog ok");
-
-	//FLASH_Test();
-	//*(__IO uint32_t *) (BKPSRAM_BASE + 1) = 30;
+#else
+	Log_Message("Watchdog disabled");
+#endif
 
 	int btn_state = 0;
 	LED_Init();
@@ -80,9 +78,9 @@ main(int argc, char* argv[]) {
 	}
 
 	while (1) {
+#ifdef WATCHDOG_ENABLED
 		IWDG_ReloadCounter();
-
-
+#endif
 		uint8_t btn_pressed = 0;
 
 		if( GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_7) ){

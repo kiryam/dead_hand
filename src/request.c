@@ -56,25 +56,14 @@ int on_body_callback(http_parser* parser, const char *at, size_t length) {
 
 
 int request_parse(Request* request, char* data, unsigned int length){
-	 //int poison = POISON_CHECK();
-	 //char poison_str[64]={0};
-	 //itoa(poison_str, poison, 10);
-	 //Log_Message(poison_str);
-
-
 	 http_parser parser;
-	 //http_parser *parser = malloc_c(sizeof(http_parser));
-	 /*if (parser == NULL ){
-		 Log_Message("Out of memory");
-		 return 1;
-	 }*/
 	 parser.data = request;
 	 http_parser_init(&parser, HTTP_REQUEST);
 	 http_parser_settings settings;
 	 http_parser_settings_init(&settings);
 	 settings.on_url = url_callback;
 	 settings.on_header_field = header_field_callback;
-	// settings.on_header_value = header_value_callback;
+	 settings.on_header_value = header_value_callback;
 	 //settings.on_body = on_body_callback;
 
 
