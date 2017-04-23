@@ -1,27 +1,97 @@
 #include "request.h"
 #include "string.h"
 #include "log.h"
+#include "http_parser.h"
 
-int request_parse(Request* request, char* raw_header);
 
-Request* request_init(char* raw_data){
-	Request* request = (Request*)malloc_c(sizeof(Request));
-	request->path[0] = '\0';
-	request->proto[0] = '\0';
-	request->headers_count = 0;
-	request->data_count = 0;
-	request->type =0;
+int request_parse(Request* request, char* data, unsigned int length);
+/*
+int request_init(Request* request, char* data, unsigned int length){
+	if (length > 1024) {
+		return 1;
+	} // TODO
 
-	if( request_parse(request, raw_data) != 0){
+	if( request_parse(request, data, length) != 0){
 		Log_Message("Parse header error");
-		free_c(request);
-		return NULL;
+		//free_c(request);
+		return 1;
 	}
 
-	return request;
+	return 0;
+}*/
+
+int url_callback(http_parser* parser, const char *at, size_t length) {
+	strncpy(((Request*)parser->data)->path, at, length);
+	return 0;
+}
+
+int header_field_callback(http_parser* parser, const char *at, size_t length) {
+	Request* request = parser->data;
+	memset(request->tmp_field, 0, REQUEST_MAX_HEADER_KEY);
+	strncpy(request->tmp_field, at, length);
+	return 0;
+}
+
+int header_value_callback(http_parser* parser, const char *at, size_t length) {
+	Request* request = parser->data;
+
+	Request_Header* header = malloc_c(sizeof(Request_Header));
+	if (header == NULL) {
+		Log_Message("Out of memory");
+		return 1;
+	}
+
+	strncpy(header->key, request->tmp_field, REQUEST_MAX_HEADER_KEY);
+	strncpy(header->value, at, length);
+
+	request->headers[request->headers_count++] = header;
+	return 0;
 }
 
 
+int on_body_callback(http_parser* parser, const char *at, size_t length) {
+	Request* request = parser->data;
+	return 0;
+}
+
+
+int request_parse(Request* request, char* data, unsigned int length){
+	 //int poison = POISON_CHECK();
+	 //char poison_str[64]={0};
+	 //itoa(poison_str, poison, 10);
+	 //Log_Message(poison_str);
+
+
+	 http_parser parser;
+	 //http_parser *parser = malloc_c(sizeof(http_parser));
+	 /*if (parser == NULL ){
+		 Log_Message("Out of memory");
+		 return 1;
+	 }*/
+	 parser.data = request;
+	 http_parser_init(&parser, HTTP_REQUEST);
+	 http_parser_settings settings;
+	 http_parser_settings_init(&settings);
+	 settings.on_url = url_callback;
+	 settings.on_header_field = header_field_callback;
+	// settings.on_header_value = header_value_callback;
+	 //settings.on_body = on_body_callback;
+
+
+	 http_parser_execute(&parser, &settings, data, length);
+
+	 request->type = GET;
+	 if (parser.method == 3 ){
+		 request->type = POST;
+	 }
+
+
+	// free_c(parser);
+
+	 return 0;
+}
+
+/*
 int request_parse(Request* request, char* raw_header){
 	char* ptr = raw_header;
 	int path_cur=0;
@@ -86,13 +156,19 @@ int request_parse(Request* request, char* raw_header){
 			char *search = ": ";
 			strncpy(line, ptr, path_cur-1);
 
-			// key
-			token = strtok(line, search);
-			strncpy(header->key, token, REQUEST_MAX_HEADER_KEY);
-
-			// value
-			token = strtok(NULL, search);
-			strncpy(header->value, token, REQUEST_MAX_HEADER_VALUE);
+			int key_len = 0;
+			while(key_len <= REQUEST_MAX_HEADER_KEY && line[++key_len] != ':' ){
+				if( key_len == REQUEST_MAX_HEADER_KEY) {
+					Log_Message("Header key max len");
+					return 1;
+				}
+			}
+			strncpy(header->key, line, key_len);
+			if( line[key_len+1] == ' ' ) {
+				strncpy(header->value, &line[key_len+2], REQUEST_MAX_HEADER_VALUE);
+			}else{
+				strncpy(header->value, &line[key_len+1], REQUEST_MAX_HEADER_VALUE);
+			}
 
 			request->headers[header_parsed++] = header;
 
@@ -150,7 +226,7 @@ int request_parse(Request* request, char* raw_header){
 
 	return 0;
 }
-
+*/
 
 void request_free(Request* request){
 	for(int i=0;i<request->headers_count;i++){
@@ -162,7 +238,7 @@ void request_free(Request* request){
 	}
 
 
-	free_c(request);
+	//free_c(request);
 }
 
 

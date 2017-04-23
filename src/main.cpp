@@ -15,9 +15,6 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-#define MEMORY_SIZE 1199523 - 1024
-
-
 void BTN_Init() {
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 	GPIO_InitTypeDef GPIO_InitStructure_Btn;
@@ -35,6 +32,7 @@ void BCKP_Init(){
 	PWR_BackupRegulatorCmd(ENABLE);
 }
 
+
 int
 main(int argc, char* argv[]) {
 	memory_init();
@@ -47,8 +45,6 @@ main(int argc, char* argv[]) {
 	//IWDG_Enable(); // TODO enable on release
 
 	Log_Message("Watchdog ok");
-
-
 
 	//FLASH_Test();
 	//*(__IO uint32_t *) (BKPSRAM_BASE + 1) = 30;
@@ -131,5 +127,3 @@ main(int argc, char* argv[]) {
 }
 
 #pragma GCC diagnostic pop
-
-// ----------------------------------------------------------------------------

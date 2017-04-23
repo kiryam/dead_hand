@@ -18,7 +18,8 @@ extern "C" {
 
 
 
-#define RESPONSE_MAX_LEN 1024*3
+
+#define RESPONSE_MAX_LEN 1024*6
 
 
 #define REQUEST_DATA_KEY_LEN 40
@@ -49,10 +50,11 @@ typedef struct {
 	char proto[REQUEST_MAX_PROTO_LEN];
 	Request_Header* headers[REQUEST_MAX_HEADER_COUNT];
 	Request_Data * data[REQUEST_MAX_DATA_COUNT];
+
+	char tmp_field[REQUEST_MAX_HEADER_KEY]; // need for stream parsing
 } Request;
 
-
-Request* request_init(char* raw_data);
+int request_parse(Request* request, char* data, unsigned int length);
 void request_free(Request* request);
 
 #ifdef __cplusplus

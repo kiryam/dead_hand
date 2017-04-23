@@ -10,6 +10,7 @@ extern const char static_template_page[];
 
 extern const char static_page_connect[];
 extern const char static_page_manage[];
+extern const char static_page_tcl[];
 
 
 #ifdef __cplusplus

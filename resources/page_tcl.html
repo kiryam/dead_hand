@@ -1,0 +1,32 @@
+<h1>TCL Play</h1>
+
+<style type="text/css" media="screen">
+    #editor { 
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+</style>
+
+<div style="margin:10px; position: relative;height:400px">
+	<div id="editor">puts "Hello world"
+	</div>
+</div>
+<div>
+<button class="btn btn-success" onclick="execute();">Execute</button>
+</div>
+
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/monokai");
+    editor.getSession().setMode("ace/mode/tcl");
+    
+    
+    function execute(){
+    	jQuery.post("/tcl?rnd="+new Date().getTime(), {code: editor.getValue()}).success(function(){console.log("OK")})
+    }
+</script>
