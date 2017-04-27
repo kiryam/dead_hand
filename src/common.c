@@ -2,9 +2,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define POOL_SIZE 1024 * 20
-
-#define USE_UMM_MALLOC
 
 #ifdef USE_UMM_MALLOC
 #include "umm_malloc.h"
@@ -12,7 +9,7 @@
 char umm_heap_pool[POOL_SIZE];
 #endif
 
-//#define USE_TLSF
+
 
 #ifdef USE_TLSF
 #include "tlsf.h"
@@ -20,7 +17,7 @@ static char pool[POOL_SIZE];
 #endif
 
 void sleepMs(unsigned int e) {
-	e = e*1000;
+	e = (SystemCoreClock*e)/1000;
 	while(--e > 0){
 		__asm("nop");
 	}

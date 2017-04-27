@@ -63,7 +63,7 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 				parser->errno = OUT_OF_MEMORY;
 				goto err;
 			}
-			parser->message[0] = '\0';
+			parser->message[parser->message_size] = '\0';
 			UPDATE_STATE(s_message_read);
 			BUFFER_EMPTY();
 		} else {
@@ -104,8 +104,6 @@ void ipd_parser_free(ipd_parser *parser){
 	if (parser->message != NULL){
 		free_c(parser->message);
 	}
-
-	free_c(parser);
 }
 
 

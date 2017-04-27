@@ -14,3 +14,5 @@ Display: SSD1306, I2C 0.96
 
 build resources.s in resources path. (make)
 Add resources.o as object into project
+
+Make sure that TRACE flag does not passed if you not using SWD debug.

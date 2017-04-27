@@ -18,6 +18,12 @@ typedef void (*functiontype)();
 
 enum MENU_LAYOUT {EMPTY, LIST};
 
+
+#define POOL_SIZE 1024 * 40
+
+#define USE_UMM_MALLOC
+//#define USE_TLSF
+
 void memory_init();
 void sleepMs(unsigned int);
 _PTR malloc_c(size_t size);

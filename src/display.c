@@ -89,7 +89,7 @@ void Display_Init() {
 	SSD1306_Fill(SSD1306_COLOR_BLACK);
 	SSD1306_drawBitmap(0,0, dead_hand_128_64, 128, 60, SSD1306_COLOR_WHITE);
 	SSD1306_UpdateScreen();
-	sleepMs(2000);
+	sleepMs(500);
 
 	active_controller = controller_homepage;
 	active_render = render_homepage;

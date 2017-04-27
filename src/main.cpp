@@ -15,6 +15,24 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+
+void TIM2_IRQHandler() {
+	if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET) {
+		TIM_ClearITPendingBit(TIM2, TIM_IT_Update);
+		Display_Render();
+	}
+}
+
+
+#ifdef __cplusplus
+}
+#endif
+
 void BTN_Init() {
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 	GPIO_InitTypeDef GPIO_InitStructure_Btn;
@@ -30,6 +48,23 @@ void BCKP_Init(){
 	PWR_BackupAccessCmd(ENABLE);
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_BKPSRAM, ENABLE);
 	PWR_BackupRegulatorCmd(ENABLE);
+}
+
+void RenderTimer_Init(){
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
+	TIM_TimeBaseInitTypeDef base_timer;
+	TIM_TimeBaseStructInit(&base_timer);
+
+
+	base_timer.TIM_Prescaler = 24000 - 1;
+	base_timer.TIM_Period = 1000/5;
+	TIM_TimeBaseInit(TIM2, &base_timer);
+
+	TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
+	TIM_Cmd(TIM2, ENABLE);
+
+	NVIC_EnableIRQ(TIM2_IRQn);
+	NVIC_SetPriority(TIM2_IRQn, 20);
 }
 
 int main(int argc, char* argv[]) {
@@ -70,12 +105,18 @@ int main(int argc, char* argv[]) {
 	Display_Init();
 	Log_Message("Display ok");
 
+	RenderTimer_Init();
+
+
+
 	WIFI_Init();
 	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
 		Log_Message("Server start ok");
 	}else{
 		Log_Message("Failed to start server");
 	}
+
+
 
 	while (1) {
 #ifdef WATCHDOG_ENABLED
@@ -120,7 +161,6 @@ int main(int argc, char* argv[]) {
 		}
 
 		Display_Btn_Pressed(btn_pressed);
-		Display_Render();
     }
 }
 

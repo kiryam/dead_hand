@@ -9,59 +9,65 @@ static message_command* message_queue_rear = NULL;
 static int message_queue_count = 0;
 
 
-static ipd_parser* message_data_queue[MAX_PENDING_CONNETION*2] = {0};
-static unsigned int message_data_cursors[MAX_PENDING_CONNETION] = {0};
+static message_data* message_data_queue[MAX_PENDING_CONNETION*MAX_PENDING_DATA] = {0};
+static unsigned int message_data_cursors[MAX_PENDING_CONNETION*2] = {0};
 
-int message_data_queue_add(ipd_parser* parser){
-	int conn_id = parser->conn_id;
-	if ( conn_id >= MAX_PENDING_CONNETION ) {
-		Log_Message("Maximum pending connections");
-		return 1;
-	}
-	if (message_data_cursors[conn_id] >= MAX_PENDING_DATA){
-		Log_Message("Data message queue overloaded");
-		return 1;
-	}
+#define IPD_RAW_QUEUE_SIZE 4
+static char* ipd_raw_queue[IPD_RAW_QUEUE_SIZE] = {0};
+static  int ipd_raw_write_cursor = 0;
+static int ipd_raw_read_cursor = 0;
 
-	parser->next = NULL;
-
-	if( message_data_queue[conn_id<<1] == NULL) {
-		message_data_queue[conn_id<<1] = message_data_queue[(conn_id<<1)+1] = parser;
-	} else {
-		message_data_queue[(conn_id<<1)+1]->next = parser;
-		message_data_queue[(conn_id<<1)+1] = parser;
+// TODO CONN_ID
+// message_data_cursors[conn_id << 0] // read_cursor
+// message_data_cursors[conn_id << 1] // write_cursor
+void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
+	unsigned int* write_cursor = &message_data_cursors[(conn_id<<1)+1];
+	if (*write_cursor >= IPD_RAW_QUEUE_SIZE) {
+		*write_cursor = 0;
 	}
 
-	message_data_cursors[conn_id]++;
+	if (message_data_queue[*write_cursor] != NULL) {
+		Log_Message("Data buffer overflow");
+		free_c(message_data_queue[*write_cursor]);
+		message_data_queue[*write_cursor] = NULL;
+	}
 
-	return 0;
+	message_data* packet=(message_data*)malloc_c(sizeof(message_data));
+	char* msg = (char*)malloc_c(sizeof(char)*length);
+	if (msg == NULL){
+		free_c(packet);
+		return;
+	}
+	strncpy(msg, buff, length);
+
+	packet->conn_id = conn_id;
+	packet->message_length = length;
+	packet->message = msg;
+
+	message_data_queue[*write_cursor] = packet;
+	*write_cursor=*write_cursor+1;
 }
 
-ipd_parser* message_data_queue_get_by_conn_id(unsigned int conn_id){
-	if ( conn_id >= MAX_PENDING_CONNETION ) {
-		Log_Message("Conn_id to big");
-		return NULL;
+message_data* ipd_queue_get_by_conn_id(unsigned int conn_id) {
+	unsigned int* read_cursor = &message_data_cursors[(conn_id<<1)+0];
+
+	if (*read_cursor >= IPD_RAW_QUEUE_SIZE){
+		*read_cursor = 0;
 	}
 
-	if (message_data_cursors[conn_id] == 0){
-		return NULL;
+	message_data *packet = message_data_queue[*read_cursor];
+	if (packet != NULL){
+		message_data_queue[*read_cursor] = NULL;
 	}
 
-	message_data_cursors[conn_id]--;
-	ipd_parser* msg = message_data_queue[conn_id<<1]; // get from front
-	message_data_queue[conn_id<<1] = msg->next; // front set to next
-
-	//if (message_data_cursors[conn_id] == 0) {
-	//	message_data_queue[(conn_id<<1)+1] = NULL;
-	//}
-
-	return msg;
+	*read_cursor = *read_cursor+1;
+	return packet;
 }
 
-ipd_parser*  message_data_queue_get(){
-	ipd_parser* ret = NULL;
+message_data*  ipd_queue_get(){
+	message_data* ret = NULL;
 	for(int i=0;i<MAX_PENDING_CONNETION; i++){
-		ret = message_data_queue_get_by_conn_id(i);
+		ret = ipd_queue_get_by_conn_id(i);
 		if (ret != NULL){
 			return ret;
 		}
@@ -69,7 +75,6 @@ ipd_parser*  message_data_queue_get(){
 
 	return NULL;
 }
-
 
 message_command* message_queue_add(char* buff){
 	if(message_queue_count+1 > MAX_PENDING_MESSAGES){

@@ -109,6 +109,9 @@
   #define HSI_VALUE    ((uint32_t)16000000) /*!< Value of the Internal oscillator in Hz*/
 #endif /* HSI_VALUE */
 
+#if !defined  (HSI_STARTUP_TIMEOUT)
+#define HSI_STARTUP_TIMEOUT   ((uint16_t)0x0500) /*!< Time out for HSI start up */
+#endif
 /**
  * @brief STM32F2XX Standard Peripherals Library version number V1.1.3
    */

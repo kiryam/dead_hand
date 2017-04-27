@@ -6,6 +6,12 @@
 #include "display.h"
 #include "wifi_status.h"
 #include "relay.h"
+#include "common.h"
+
+#ifdef USE_UMM_MALLOC
+#include "umm_malloc.h"
+#include "umm_malloc_cfg.h"
+#endif
 
 int handle_request(Request* request, char* response){
 	uint8_t response_page[RESPONSE_MAX_LEN] = {0};
@@ -178,8 +184,15 @@ void handler_get_protocol_log(Request* request, char* response){
 
 
 void handler_memory(Request* request, char* response){
+#ifdef USE_UMM_MALLOC
+	umm_info(NULL, 0);
+	sprintf(response, "TotalBlocks: %d<br />UsedBlocks: %d<br />FreeBlocks: %d<br />",  (size_t)ummHeapInfo.totalBlocks,  (size_t)ummHeapInfo.usedBlocks, (size_t)ummHeapInfo.freeBlocks);
+#endif
+
+#ifdef USE_TLSF
 	Log_Message("Memory");
 	sprintf(response, "Allocated memory: %d of %d", get_memory_allocated_total(), get_memory_max());
+#endif
 }
 
 void handler_favicon(Request* request, char* response){

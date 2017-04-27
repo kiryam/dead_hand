@@ -7,7 +7,7 @@ extern "C" {
 
 #include "ipd_parser.h"
 
-#define MESSAGE_COMMAND_SIZE 128
+#define MESSAGE_COMMAND_SIZE 256
 
 #define MAX_PENDING_MESSAGES 200
 
@@ -22,8 +22,15 @@ typedef struct {
 } message_command;
 
 
-int message_data_queue_add(ipd_parser* parser);
-ipd_parser*  message_data_queue_get();
+typedef struct {
+	unsigned int conn_id;
+	char* message;
+	size_t message_length;
+} message_data;
+
+
+void ipd_queue_add(unsigned int conn_id, char* buff, size_t length);
+message_data* ipd_queue_get();
 
 #ifdef __cplusplus
 }
