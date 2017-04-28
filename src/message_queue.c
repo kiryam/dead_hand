@@ -76,19 +76,19 @@ message_data*  ipd_queue_get(){
 	return NULL;
 }
 
-message_command* message_queue_add(char* buff){
+void message_queue_add(char* buff){
 	if(message_queue_count+1 > MAX_PENDING_MESSAGES){
 		Log_Message("Message queue overloaded");
-		return NULL; // TODO QUEUE overloaded notify
+		return; // TODO QUEUE overloaded notify
 	}
 
 	message_queue_count++;
 	message_command* msg = (message_command*)malloc_c(sizeof(message_command));
 	if (msg == NULL){
 		Log_Message("Out of memory");
-		return NULL;
+		return;
 	}
-	//memset(msg, 0, sizeof(message_command));
+
 	strncpy(msg->line, buff, MESSAGE_COMMAND_SIZE);
 	msg->next = NULL;
 
@@ -99,7 +99,7 @@ message_command* message_queue_add(char* buff){
 		message_queue_rear = msg;
 	}
 
-	return msg;
+	return;
 }
 
 message_command* message_queue_get(){

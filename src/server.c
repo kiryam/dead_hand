@@ -53,7 +53,6 @@ int pending_disconnection_pop() {
 void func_wifi_server_on_connect(int conn_id){
 	clients_count++;
 	open_connections[conn_id] = 1;
-	Log_Message("Connected");
 	return;
 }
 
@@ -61,16 +60,11 @@ void WIFI_Server_Timer_Init() {
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
-
 	base_timer.TIM_Prescaler = 24000 - 1;;
 	base_timer.TIM_Period = 100;
-
 	TIM_TimeBaseInit(TIM7, &base_timer);
-
 	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM7, ENABLE);
-	NVIC_EnableIRQ(TIM7_IRQn);
-	NVIC_SetPriority(TIM7_IRQn, 60);
 }
 
 void TIM7_IRQHandler() {
@@ -141,6 +135,8 @@ void TIM7_IRQHandler() {
 }
 
 void func_wifi_on_new_line(char* line){
+	//return; // FIXME
+
 	if (strncmp(&line[2], "CONNECT", 7) == 0) {
 		pending_connection_push(atoi(&line[0]));
 	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {

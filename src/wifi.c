@@ -4,6 +4,7 @@
 #include "message_queue.h"
 #include "server.h"
 #include "ipd_parser.h"
+#include "usart_fifo.h"
 
 //#define LOG_ESP_MESSAGES
 
@@ -27,7 +28,7 @@ static ipd_parser parser;
 
 #define PROTOCOL_LOG_MAX_LENGTH 1024*4
 
-#define PROTO_LOG
+//#define PROTO_LOG
 
 #ifdef PROTO_LOG
 char protocol_log[PROTOCOL_LOG_MAX_LENGTH] = {0};
@@ -111,65 +112,85 @@ void TIM6_DAC_IRQHandler() {
 	}
 }
 
+
+void TIM3_IRQHandler() {
+	if (TIM_GetITStatus(TIM3, TIM_IT_Update) != RESET) {
+		TIM_ClearITPendingBit(TIM3, TIM_IT_Update);
+
+		uint8_t byte;
+
+		while ((mcu_usart1_fifo_receive(&byte) & USART_FIFO_NO_DATA) == 0){
+			#ifdef PROTO_LOG
+				protocol_log_byte(byte, DIR_IN);
+			#endif
+			if( recv_message_data_started == 1){
+				ipd_parser_execute(&parser, byte);
+
+				if ( parser.errno != OK ){
+					ipd_parser_free(&parser);
+					if( parser.errno == MESSAGE_SIZE_READ_ERROR ){
+						Log_Message("MESSAGE_SIZE_READ_ERROR");
+					}else{
+						Log_Message("IPDparse error");
+					}
+					#ifdef PROTO_LOG
+					Log_Message(get_protocol_log());
+					#endif
+					recv_message_data_started = 0;
+					return;
+				} else if ( parser.state == s_message_done ){
+					//Log_Message("IPDparse ok");
+					ipd_queue_add(parser.conn_id, parser.message, parser.message_size);
+					ipd_parser_free(&parser);
+					recv_message_data_started = 0;
+					return;
+				}
+
+				return;
+			}
+
+			if ( wifi_buff_pos >= MESSAGE_COMMAND_SIZE ){
+				wifi_buff_pos = 0;
+				Log_Message("Maximum buff length exited");
+			}
+
+
+			if( wifi_buff_pos == 0 && byte == '>' ){
+				is_welcome_byte = 1;
+				return;
+			}
+
+			wifi_buff[wifi_buff_pos++] = byte;
+
+			if( byte == '\n' ){
+				is_new_line = 1;
+				wifi_buff[wifi_buff_pos] = '\0';
+				wifi_buff_pos=0;
+				if (strncmp(wifi_buff, "WIFI GOT IP\r\n", 13) == 0){
+					Log_Message("WIFI GOT IP");
+				}else if(strncmp(wifi_buff, "WIFI CONNECTED\r\n", 16) == 0){
+					Log_Message("WIFI CONNECTED");
+				} else {
+					message_queue_add(wifi_buff);
+				}
+				return;
+			}
+
+			if( strncmp(wifi_buff, "+IPD,", 5) == 0 ){
+				//Log_Message("IPD Parse started");
+				recv_message_data_started = 1;
+				wifi_buff_pos = 0;
+				ipd_parser_init(&parser);
+			}
+		}
+	}
+}
+
 void USART1_IRQHandler(void) {
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) == SET) {
 		USART_ClearITPendingBit(USART1, USART_IT_RXNE);
 
-		char byte = USART_ReceiveData(USART1);
-
-#ifdef PROTO_LOG
-		protocol_log_byte(byte, DIR_IN);
-#endif
-
-		if( recv_message_data_started == 1){
-			ipd_parser_execute(&parser, byte);
-
-			if ( parser.errno != OK ){
-				ipd_parser_free(&parser);
-				Log_Message("IPDparse error ");
-#ifdef PROTO_LOG
-				Log_Message(get_protocol_log());
-#endif
-				recv_message_data_started = 0;
-				wifi_buff_pos = 0;
-				return;
-			} else if ( parser.state == s_message_done ){
-				ipd_queue_add(parser.conn_id, parser.message, parser.message_size);
-				ipd_parser_free(&parser);
-				recv_message_data_started = 0;
-				wifi_buff_pos = 0;
-				return;
-			}
-
-			return;
-		}
-
-		if ( wifi_buff_pos >= MESSAGE_COMMAND_SIZE ){
-			wifi_buff_pos = 0;
-			Log_Message("Maximum buff length exited");
-		}
-
-
-		if( wifi_buff_pos == 0 && byte == '>' ){
-			is_welcome_byte = 1;
-			return;
-		}
-
-		wifi_buff[wifi_buff_pos++] = byte;
-
-		if( byte == '\n' ){
-			is_new_line = 1;
-			wifi_buff[wifi_buff_pos] = '\0';
-			wifi_buff_pos=0;
-
-			message_queue_add(wifi_buff);
-			return;
-		}
-
-		if( strncmp(wifi_buff, "+IPD,", 5) == 0 ){
-			recv_message_data_started = 1;
-			ipd_parser_init(&parser);
-		}
+		handler_usart_rx();
 	}
 }
 
@@ -192,7 +213,6 @@ void MY_USART_Init(){
 	gpio_port1.GPIO_PuPd = GPIO_PuPd_UP;
 	gpio_port1.GPIO_OType =  GPIO_OType_PP;
 	GPIO_Init(GPIOA, &gpio_port1);
-
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_USART1);
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource10, GPIO_AF_USART1);
 
@@ -203,55 +223,28 @@ void MY_USART_Init(){
 	usart.USART_Parity = USART_Parity_No;
 	usart.USART_StopBits = USART_StopBits_1;
 	usart.USART_WordLength = USART_WordLength_8b;
-
 	USART_Init(USART1, &usart);
 	USART_Cmd(USART1, ENABLE);
+	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
 
-	/*
-	DMA_InitTypeDef hdma_usart1;
-	hdma_usart1.DMA_BufferSize = DMA_BUFF_SIZE;
-	hdma_usart1.DMA_Channel = DMA_Channel_4;
-	hdma_usart1.DMA_DIR = DMA_DIR_PeripheralToMemory;
-	hdma_usart1.DMA_FIFOMode = DMA_FIFOMode_Disable;
-	hdma_usart1.DMA_FIFOThreshold = DMA_FIFOThreshold_1QuarterFull;
-	hdma_usart1.DMA_Memory0BaseAddr =  (uint32_t)&dma_buff[0];
-	hdma_usart1.DMA_MemoryBurst = DMA_MemoryBurst_INC8;
-	hdma_usart1.DMA_MemoryDataSize = DMA_MemoryDataSize_Byte;
-	hdma_usart1.DMA_MemoryInc = DMA_MemoryInc_Enable;
-	hdma_usart1.DMA_Mode = DMA_Mode_Normal;
-	hdma_usart1.DMA_PeripheralBaseAddr = (uint32_t)&(USART1->DR);
-	hdma_usart1.DMA_PeripheralBurst = DMA_PeripheralBurst_Single;
-	hdma_usart1.DMA_PeripheralDataSize = DMA_PeripheralDataSize_Byte;
-	hdma_usart1.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-	hdma_usart1.DMA_Priority = DMA_Priority_High;
-	DMA_Init(DMA2_Stream2, &hdma_usart1);
-
-	USART_DMACmd(USART1, USART_DMAReq_Rx, ENABLE);
-	DMA_Cmd(DMA2_Stream2, ENABLE);
-
-	*/
-
-	NVIC_InitTypeDef NVIC_InitStructure;
-	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&NVIC_InitStructure);
 
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
-
 	base_timer.TIM_Prescaler = 24000 - 1;
 	base_timer.TIM_Period = 10;
 	TIM_TimeBaseInit(TIM6, &base_timer);
-
 	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM6, ENABLE);
 
-	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
-	NVIC_EnableIRQ(TIM6_DAC_IRQn);
-	NVIC_SetPriority(TIM6_DAC_IRQn, 50);
+	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
+	TIM_TimeBaseInitTypeDef base_timer_tim3;
+	TIM_TimeBaseStructInit(&base_timer_tim3);
+	base_timer_tim3.TIM_Prescaler = 0;
+	base_timer_tim3.TIM_Period = 100;
+	TIM_TimeBaseInit(TIM3, &base_timer_tim3);
+	TIM_ITConfig(TIM3, TIM_IT_Update, ENABLE);
+	TIM_Cmd(TIM3, ENABLE);
 }
 
 // TODO REMOVE
@@ -684,8 +677,8 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 
 
 	if( strncmp(answer, "busy", 4) == 0 ){
-		Log_Message("Busy.. going to step1");
-		sleepMs(100);
+		//Log_Message("Busy.. going to step1");
+		sleepMs(1000);
 		retry_remained--;
 		goto step1;
 	}
@@ -695,21 +688,30 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 			return 1;
 		}
 		if( strncmp(answer, "ERROR", 5) == 0 ){
-			Log_Message("ERROR answer. going to step1");
-			sleepMs(100);
-			retry_remained--;
-			goto step1;
+			Log_Message("ERROR answer");
+			return 1;
+			//Log_Message(command);
+			//sleepMs(100);
+			//retry_remained--;
+			//goto step1;
 		}
 		Log_Message(answer);
 	}
 
-	if (strncmp(answer, "OK", 2) != 0) {
-		Log_Message("Not OK");
-		Log_Message(answer);
-		return 1;
+	if(strncmp(answer, "link is not valid", 17) == 0){
+		Log_Message("Link is not valid. Going to step1");
+		sleepMs(100);
+		retry_remained--;
+		goto step1;
 	}
 
-	if( wait_welcome_byte(100) != 0 ){
+	if (strncmp(answer, "OK", 2) != 0) {
+		Log_Message("Not OK");
+		//Log_Message(answer);
+		//return 1;
+	}
+
+	if( wait_welcome_byte(2000) != 0 ){
 		Log_Message("No welcome message");
 		return 1;
 	}
@@ -734,20 +736,25 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 			return 1;
 		}
 
-	char validate[32] = {0};
-	sprintf(validate, "Recv %d bytes\r\n", bytes_count);
-
 	if( strncmp("busy", answer, 4) == 0 ){
-		Log_Message("Busy.. going to step1 (from step2)");
+		//Log_Message("Busy.. going to step1 (from step2)");
 		sleepMs(100);
 		goto step1;
 	}
 
+	if( strncmp("SEND OK", answer, 7) ){
+		return 0;
+	}
+
+	char validate[32] = {0};
+	sprintf(validate, "Recv %d bytes\r\n", bytes_count);
+
+
 	if ( strncmp(validate, answer, 32) != 0){
 		retry_remained--;
-		Log_Message("=========\r\nValidate failed");
-		Log_Message(answer);
-		Log_Message("=========");
+		//Log_Message("=========\r\nValidate failed");
+		//Log_Message(answer);
+		//Log_Message("=========");
 		goto step2;
 	}
 

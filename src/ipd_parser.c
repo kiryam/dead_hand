@@ -21,6 +21,8 @@ do {                                                                  \
 void ipd_parser_init(ipd_parser *parser){
 	 memset(parser, 0, sizeof(*parser));
 	 parser->state = s_conn_id;
+	 parser->buff_pos = 0;
+	 BUFFER_EMPTY();
 }
 
 void ipd_parser_execute(ipd_parser *parser, char byte){
@@ -45,7 +47,7 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 
 		break;
 	case s_message_size:
-		if (parser->buff_pos > 10) {
+		if (parser->buff_pos > 20) {
 			parser->errno = MESSAGE_SIZE_READ_ERROR;
 			goto err;
 			break;

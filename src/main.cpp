@@ -50,6 +50,45 @@ void BCKP_Init(){
 	PWR_BackupRegulatorCmd(ENABLE);
 }
 
+void NVIC_Init(){
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+
+	NVIC_InitTypeDef NVIC_InitStructure_USART1;
+	NVIC_InitStructure_USART1.NVIC_IRQChannel = USART1_IRQn;
+	NVIC_InitStructure_USART1.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure_USART1.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure_USART1.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_USART1);
+
+	NVIC_InitTypeDef NVIC_InitStructure_TIM3;
+	NVIC_InitStructure_TIM3.NVIC_IRQChannel = TIM3_IRQn;
+	NVIC_InitStructure_TIM3.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure_TIM3.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure_TIM3.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_TIM3);
+
+	NVIC_InitTypeDef NVIC_InitStructure_TIM6;
+	NVIC_InitStructure_TIM6.NVIC_IRQChannel = TIM6_DAC_IRQn;
+	NVIC_InitStructure_TIM6.NVIC_IRQChannelPreemptionPriority = 1;
+	NVIC_InitStructure_TIM6.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure_TIM6.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_TIM6);
+
+	NVIC_InitTypeDef NVIC_InitStructure_TIM7;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannel = TIM7_IRQn;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelPreemptionPriority = 2;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_TIM7);
+
+	NVIC_InitTypeDef NVIC_InitStructure_TIM2;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannel = TIM2_IRQn;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannelPreemptionPriority = 2;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_TIM2);
+}
+
 void RenderTimer_Init(){
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
@@ -62,12 +101,10 @@ void RenderTimer_Init(){
 
 	TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM2, ENABLE);
-
-	NVIC_EnableIRQ(TIM2_IRQn);
-	NVIC_SetPriority(TIM2_IRQn, 20);
 }
 
 int main(int argc, char* argv[]) {
+	NVIC_Init();
 	memory_init();
 	BCKP_Init();
 
