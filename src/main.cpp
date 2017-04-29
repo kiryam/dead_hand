@@ -60,31 +60,24 @@ void NVIC_Init(){
 	NVIC_InitStructure_USART1.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_USART1);
 
-	NVIC_InitTypeDef NVIC_InitStructure_TIM3;
-	NVIC_InitStructure_TIM3.NVIC_IRQChannel = TIM3_IRQn;
-	NVIC_InitStructure_TIM3.NVIC_IRQChannelPreemptionPriority = 0;
-	NVIC_InitStructure_TIM3.NVIC_IRQChannelSubPriority = 1;
-	NVIC_InitStructure_TIM3.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&NVIC_InitStructure_TIM3);
-
 	NVIC_InitTypeDef NVIC_InitStructure_TIM6;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannel = TIM6_DAC_IRQn;
-	NVIC_InitStructure_TIM6.NVIC_IRQChannelPreemptionPriority = 1;
+	NVIC_InitStructure_TIM6.NVIC_IRQChannelPreemptionPriority = 2;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannelSubPriority = 0;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_TIM6);
 
 	NVIC_InitTypeDef NVIC_InitStructure_TIM7;
 	NVIC_InitStructure_TIM7.NVIC_IRQChannel = TIM7_IRQn;
-	NVIC_InitStructure_TIM7.NVIC_IRQChannelPreemptionPriority = 2;
-	NVIC_InitStructure_TIM7.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelPreemptionPriority = 3;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelSubPriority = 2;
 	NVIC_InitStructure_TIM7.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_TIM7);
 
 	NVIC_InitTypeDef NVIC_InitStructure_TIM2;
 	NVIC_InitStructure_TIM2.NVIC_IRQChannel = TIM2_IRQn;
-	NVIC_InitStructure_TIM2.NVIC_IRQChannelPreemptionPriority = 2;
-	NVIC_InitStructure_TIM2.NVIC_IRQChannelSubPriority = 1;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannelPreemptionPriority = 3;
+	NVIC_InitStructure_TIM2.NVIC_IRQChannelSubPriority = 3;
 	NVIC_InitStructure_TIM2.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_TIM2);
 }
@@ -96,7 +89,7 @@ void RenderTimer_Init(){
 
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 1000/5;
+	base_timer.TIM_Period = 1000/1;
 	TIM_TimeBaseInit(TIM2, &base_timer);
 
 	TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
@@ -104,6 +97,7 @@ void RenderTimer_Init(){
 }
 
 int main(int argc, char* argv[]) {
+	SysTick_Init();
 	NVIC_Init();
 	memory_init();
 	BCKP_Init();
@@ -128,15 +122,15 @@ int main(int argc, char* argv[]) {
 	Log_Message("Btn ok");
 
 	LED_On();
-	sleepMs(100);
+	sleepMs(500);
 	LED_Off();
-	sleepMs(100);
+	sleepMs(500);
 	LED_On();
-	sleepMs(100);
+	sleepMs(500);
 	LED_Off();
-	sleepMs(100);
+	sleepMs(500);
 	LED_On();
-	sleepMs(100);
+	sleepMs(500);
 	LED_Off();
 
 	Display_Init();
@@ -198,7 +192,9 @@ int main(int argc, char* argv[]) {
 		}
 
 		Display_Btn_Pressed(btn_pressed);
+		sleepMs(100);
     }
+
 }
 
 #pragma GCC diagnostic pop

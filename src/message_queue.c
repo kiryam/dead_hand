@@ -12,17 +12,51 @@ static int message_queue_count = 0;
 static message_data* message_data_queue[MAX_PENDING_CONNETION*MAX_PENDING_DATA] = {0};
 static unsigned int message_data_cursors[MAX_PENDING_CONNETION*2] = {0};
 
-#define IPD_RAW_QUEUE_SIZE 4
-static char* ipd_raw_queue[IPD_RAW_QUEUE_SIZE] = {0};
-static  int ipd_raw_write_cursor = 0;
-static int ipd_raw_read_cursor = 0;
+static message_data* message_data_payload_queue[MAX_PENDING_CONNETION] = {0};
+
+void ipd_queue_payload_add(unsigned int conn_id, char* buff, size_t length){
+	if (message_data_payload_queue[conn_id] != NULL) {
+		Log_Message("Payload overflow");
+	}
+
+	message_data* packet=(message_data*)malloc_c(sizeof(message_data));
+	if (packet == NULL){
+		Log_Message("Out of memory");
+		return;
+	}
+
+	char* msg = (char*)malloc_c(sizeof(char)*length);
+	if (msg == NULL){
+		Log_Message("Out of memory");
+		free_c(packet);
+		return;
+	}
+	strncpy(msg, buff, length);
+
+	packet->conn_id = conn_id;
+	packet->message_length = length;
+	packet->message = msg;
+
+	message_data_payload_queue[conn_id] = packet;
+}
+
+message_data* ipd_queue_get_payload(unsigned int conn_id){
+	if (message_data_payload_queue[conn_id] != NULL) {
+		message_data* packet = message_data_payload_queue[conn_id];
+		message_data_payload_queue[conn_id] = NULL;
+		return packet;
+	}
+
+	return NULL;
+}
+
 
 // TODO CONN_ID
 // message_data_cursors[conn_id << 0] // read_cursor
 // message_data_cursors[conn_id << 1] // write_cursor
 void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
 	unsigned int* write_cursor = &message_data_cursors[(conn_id<<1)+1];
-	if (*write_cursor >= IPD_RAW_QUEUE_SIZE) {
+	if (*write_cursor >= MAX_PENDING_DATA) {
 		*write_cursor = 0;
 	}
 
@@ -33,8 +67,13 @@ void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
 	}
 
 	message_data* packet=(message_data*)malloc_c(sizeof(message_data));
+	if (packet == NULL){
+		Log_Message("Out of memory");
+		return;
+	}
 	char* msg = (char*)malloc_c(sizeof(char)*length);
 	if (msg == NULL){
+		Log_Message("Out of memory");
 		free_c(packet);
 		return;
 	}
@@ -51,7 +90,7 @@ void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
 message_data* ipd_queue_get_by_conn_id(unsigned int conn_id) {
 	unsigned int* read_cursor = &message_data_cursors[(conn_id<<1)+0];
 
-	if (*read_cursor >= IPD_RAW_QUEUE_SIZE){
+	if (*read_cursor >= MAX_PENDING_DATA){
 		*read_cursor = 0;
 	}
 

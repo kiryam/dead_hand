@@ -53,8 +53,7 @@ void handler_usart_rx()
 	if (status & USART_SR_NE)
 		rx_last_error |= USART_FIFO_ERROR_NOISE;
 
-	rx_head = (uint8_t)((usart1_fifo.rx_buffer_head + 1) & (uint8_t)(
-			USART_RX_BUFFER_SIZE - 1));
+	rx_head = (uint8_t)((usart1_fifo.rx_buffer_head + 1) & (uint8_t)(USART_RX_BUFFER_SIZE - 1));
 
 	if (rx_head == usart1_fifo.rx_buffer_tail)
 	{
@@ -67,6 +66,10 @@ void handler_usart_rx()
 	}
 
 	usart1_fifo.rx_last_error = rx_last_error;
+}
+
+int fifo_get_last_rx_error(){
+	return usart1_fifo.rx_last_error;
 }
 
 void mcu_usart1_init()

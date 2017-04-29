@@ -16,10 +16,64 @@ char umm_heap_pool[POOL_SIZE];
 static char pool[POOL_SIZE];
 #endif
 
+static __IO uint32_t sysTickCounter;
+
+void SysTick_Init(void) {
+	/****************************************
+	 *SystemFrequency/1000      1ms         *
+	 *SystemFrequency/100000    10us        *
+	 *SystemFrequency/1000000   1us         *
+	 *****************************************/
+	while (SysTick_Config(SystemCoreClock / 1000) != 0) {
+	} // One SysTick interrupt now equals 1us
+
+}
+
+/**
+ * This method needs to be called in the SysTick_Handler
+ */
+void TimeTick_Decrement(void) {
+	if (sysTickCounter != 0x00) {
+		sysTickCounter--;
+	}
+}
+
+void delay_nus(u32 n) {
+	sysTickCounter = n;
+	while (sysTickCounter != 0) {
+	}
+}
+
+void delay_1ms(void) {
+	sysTickCounter = 1;
+	while (sysTickCounter != 0) {
+	}
+}
+
+int timeout_ms(u32 timeout, int *stop_if_raised) {
+	sysTickCounter = timeout;
+	while (sysTickCounter != 0) {
+		if ( *stop_if_raised ){
+			return 0;
+		}
+	}
+
+	return 1;
+}
+
+void delay_nms(u32 n) {
+	while (n--) {
+		delay_1ms();
+	}
+}
+
+void SysTick_Handler(void) {
+	TimeTick_Decrement();
+}
+
 void sleepMs(unsigned int e) {
-	e = (SystemCoreClock*e)/1000;
-	while(--e > 0){
-		__asm("nop");
+	while (e--) {
+		delay_1ms();
 	}
 }
 
@@ -41,7 +95,7 @@ void memory_init(){
 
 _PTR malloc_c(size_t size) {
 #ifdef USE_UMM_MALLOC
-	return umm_poison_malloc(size);
+	return umm_malloc(size);
 #endif
 #ifdef USE_TLSF
 	return malloc_ex(size, pool);
@@ -50,7 +104,7 @@ _PTR malloc_c(size_t size) {
 
 void free_c(_PTR p) {
 #ifdef USE_UMM_MALLOC
-	umm_poison_free( p );
+	umm_free( p );
 #endif
 #ifdef USE_TLSF
 	free_ex(p, pool);

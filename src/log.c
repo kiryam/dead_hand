@@ -10,11 +10,14 @@ static unsigned int caption_index =0;
 
 // TODO REFACTOR it
 void Log_Message(char* str){
-#ifdef TRACE
+	#ifdef TRACE
 	trace_printf("%s\r\n",str);
 	return;
+	Log_Message_FAST();
 #endif
+}
 
+void Log_Message_FAST(char* str){
 	for( int i=0;i<MAX_LOG_ENTRIES; i++ ){
 		strcpy(log_entries[i].message,log_entries[i+1].message);
 		log_entries[i].count = log_entries[i+1].count;
@@ -23,6 +26,7 @@ void Log_Message(char* str){
 	strncpy(entry->message, str, MAX_MESSAGE_LENGTH);
 	entry->count = msg_counter++;
 }
+
 
 void Log_Get_Messages(Log_Entry* target_list, int limit) {
 	for(int i=0;i<limit;i++){

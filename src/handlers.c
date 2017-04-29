@@ -72,6 +72,7 @@ void handler_connect(Request* request,  char* response){
 void handler_get_ap_list(Request* request,  char* response){
 	WIFI_List_Result* result = malloc_c(sizeof(WIFI_List_Result));
 	if (result == NULL){
+		Log_Message("Out of memory");
 		return;
 	}
 

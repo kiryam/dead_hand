@@ -29,6 +29,12 @@ void sleepMs(unsigned int);
 _PTR malloc_c(size_t size);
 void free_c(_PTR);
 
+
+void SysTick_Init(void);
+void TimeTick_Decrement(void);
+void delay_1ms(void);
+int timeout_ms(u32 timeout, int *stop_if_raised);
+
 int get_memory_allocated_total();
 
 #ifdef __cplusplus

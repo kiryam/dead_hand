@@ -2,63 +2,54 @@
 #include "string.h"
 #include "log.h"
 #include "http_parser.h"
-
-int request_parse(Request* request, char* data, unsigned int length);
-
-int url_callback(http_parser* parser, const char *at, size_t length) {
-	strncpy(((Request*)parser->data)->path, at, length);
-	return 0;
-}
-
-int header_field_callback(http_parser* parser, const char *at, size_t length) {
-	Request* request = parser->data;
-	memset(request->tmp_field, 0, REQUEST_MAX_HEADER_KEY);
-	strncpy(request->tmp_field, at, length);
-	return 0;
-}
-
-int header_value_callback(http_parser* parser, const char *at, size_t length) {
-	Request* request = parser->data;
-
-	Request_Header* header = malloc_c(sizeof(Request_Header));
-	if (header == NULL) {
-		Log_Message("Out of memory");
-		return 1;
-	}
-
-	strncpy(header->key, request->tmp_field, REQUEST_MAX_HEADER_KEY);
-	strncpy(header->value, at, length);
-
-	request->headers[request->headers_count++] = header;
-	return 0;
-}
-
-
-int on_body_callback(http_parser* parser, const char *at, size_t length) {
-	Request* request = parser->data;
-	return 0;
-}
-
+#include "picohttpparser.h"
 
 int request_parse(Request* request, char* data, unsigned int length){
-	 http_parser parser;
-	 parser.data = request;
-	 http_parser_init(&parser, HTTP_REQUEST);
-	 http_parser_settings settings;
-	 http_parser_settings_init(&settings);
-	 settings.on_url = url_callback;
-	 settings.on_header_field = header_field_callback;
-	 settings.on_header_value = header_value_callback;
-	 //settings.on_body = on_body_callback;
+	char *method, *path;
+	int pret, minor_version;
+	struct phr_header headers[100];
+	size_t method_len, path_len, num_headers;
 
-	 http_parser_execute(&parser, &settings, data, length);
+	num_headers = sizeof(headers) / sizeof(headers[0]);
 
-	 request->type = GET;
-	 if (parser.method == 3 ){
-		 request->type = POST;
-	 }
+	pret = phr_parse_request(data, length, &method, &method_len, &path, &path_len, &minor_version, headers, &num_headers, 0);
+	if (pret == -1){
+		Log_Message("Request ParseError");
+		goto fail;
+	}
 
-	 return 0;
+	strncpy(request->path, path, path_len);
+
+	for (unsigned int i=0; i<num_headers; i++){
+		if (headers[i].name_len > REQUEST_MAX_HEADER_KEY || headers[i].value_len > REQUEST_MAX_HEADER_VALUE ){
+			Log_Message("header size too big");
+			continue;
+		}
+
+		Request_Header* header = malloc_c(sizeof(Request_Header));
+		if (header == NULL) {
+			Log_Message("Out of memory");
+			goto fail;
+		}
+		strncpy(header->key, headers[i].name, headers[i].name_len);
+		strncpy(header->value, headers[i].value, headers[i].value_len);
+
+		request->headers[request->headers_count++] = header;
+	}
+
+	request->type = GET;
+	if (strncmp(method, "POST", method_len) == 0){
+		request->type = POST;
+	}
+	return 0;
+
+	fail:
+		Log_Message("Request parser error. Try to free resources");
+		while( (request->headers_count--) >= 0 ){
+			free_c(request->headers[request->headers_count]);
+		}
+
+		return 1;
 }
 
 void request_free(Request* request){

@@ -28,9 +28,11 @@ typedef struct {
 	size_t message_length;
 } message_data;
 
-
 void ipd_queue_add(unsigned int conn_id, char* buff, size_t length);
+void ipd_queue_payload_add(unsigned int conn_id, char* buff, size_t length);
+
 message_data* ipd_queue_get();
+message_data* ipd_queue_get_payload(unsigned int conn_id);
 
 #ifdef __cplusplus
 }

@@ -61,7 +61,7 @@ void WIFI_Server_Timer_Init() {
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
 	base_timer.TIM_Prescaler = 24000 - 1;;
-	base_timer.TIM_Period = 100;
+	base_timer.TIM_Period = 200;
 	TIM_TimeBaseInit(TIM7, &base_timer);
 	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM7, ENABLE);
@@ -114,7 +114,7 @@ void TIM7_IRQHandler() {
 					}
 
 					sprintf(tmp_log, "Sent %d bytes  (pending: %d)", MAX_PACKET_LEN, bytes_pending);
-					Log_Message(tmp_log);
+					Log_Message_FAST(tmp_log);
 
 					response_ptr = &response_ptr[MAX_PACKET_LEN];
 					bytes_pending -= MAX_PACKET_LEN;
@@ -123,20 +123,19 @@ void TIM7_IRQHandler() {
 						Log_Message("Send data failed");
 					}
 					sprintf(tmp_log, "Sent %d bytes", bytes_pending);
-					Log_Message(tmp_log);
+					Log_Message_FAST(tmp_log);
 
 					bytes_pending=0;
 				}
-				sleepMs(100);
+				int n = 1920000;
+				while(n--);
 			}
-			Log_Message("Send done");
+			Log_Message_FAST("Send done");
 		}
     }
 }
 
 void func_wifi_on_new_line(char* line){
-	//return; // FIXME
-
 	if (strncmp(&line[2], "CONNECT", 7) == 0) {
 		pending_connection_push(atoi(&line[0]));
 	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
