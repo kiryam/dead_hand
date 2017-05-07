@@ -31,29 +31,25 @@ extern "C" {
 zf_input_state zf_host_sys(zf_syscall_id id, const char *input) {
 	char buf[16];
 	void* buf1;
+	zf_cell len;
 
 	switch((int)id) {
 		case ZF_SYSCALL_EMIT:
 			// TODO: check forth_answer buff overflow
-			zf_cell cell;
-			cell = zf_pop();
-			forth_answer[forth_answer_cursor++] = (char)cell;
+			forth_answer[forth_answer_cursor++] = (char)zf_pop();
 			break;
 
 		case ZF_SYSCALL_PRINT:
 			// TODO: check forth_answer buff overflow
 			itoa(zf_pop(), buf, 10);
-			size_t len1;
-			len1 = strlen(buf);
-			strncpy(&forth_answer[forth_answer_cursor], buf, len1);
-			forth_answer_cursor += len1;
+			len = strlen(buf);
+			strncpy(&forth_answer[forth_answer_cursor], buf, len);
+			forth_answer_cursor += len;
 			break;
 
 		case ZF_SYSCALL_TELL:
 			// TODO: check forth_answer buff overflow
-			zf_cell len;
 			len = zf_pop();
-
 			buf1 = (uint8_t *)zf_dump(NULL) + (int)zf_pop();
 			strncpy(&forth_answer[forth_answer_cursor], (char*)buf1, len);
 			forth_answer_cursor += len;

@@ -315,7 +315,7 @@ int WIFI_Read_Line(char* answer,size_t maxlen, int unsigned timeout_ms){
 int WIFI_Exec_Cmd_Get_Answer(char* cmd, char* answer){
 	is_new_line=0;
 	WIFI_Send_Command(cmd, 0);
-	if (WIFI_Read_Line(answer, 100, 3000) != 0 ){
+	if (WIFI_Read_Line(answer, 100, 1000) != 0 ){
 		return 1;
 	}
 
@@ -339,17 +339,27 @@ int WIFI_Reset(){
 
 int WIFI_Test(){
 	char answer[100] = {0};
+	uint retry_est =10;
 
-	is_new_line=0;
-	WIFI_Send_Command("AT\r\n", 0);
+	stage1:
+		is_new_line=0;
+		WIFI_Send_Command("AT\r\n", 0);
 
-	if (WIFI_Exec_Cmd_Get_Answer("AT\r\n", answer) != 0) {
-		return 1;
+		if (WIFI_Exec_Cmd_Get_Answer("AT\r\n", answer) != 0) {
+			return 1;
+		}
+
+		if(strncmp("\r\n", answer, 2) ==0){
+			WIFI_Read_Line(answer,100, 1000);
+		}
+
+	if (strncmp(answer, "busy", 4) == 0 || (strncmp(answer, "ERROR", 5) == 0)){
+		if (!retry_est--) {
+			return 1;
+		}
+		goto stage1;
 	}
 
-	if(strncmp("\r\n", answer, 2) ==0){
-		WIFI_Read_Line(answer,100, 100);
-	}
 	return strncmp("OK", answer, 2);
 }
 
@@ -899,7 +909,7 @@ int WIFI_ATE(uint8_t mode){
 		return 1;
 	}
 
-	if( strncmp(answer, "\r\r\n", 2) == 0){
+	if( strncmp(answer, "\r\n", 2) == 0){
 		if (WIFI_Read_Line(answer, 100, 3000) != 0 ){
 			return 1;
 		}
@@ -910,9 +920,9 @@ int WIFI_ATE(uint8_t mode){
 	}
 
 	if( mode ==0 ) {
-		Log_Message("Echo disabled");
+		Log_Message_FAST("Echo disabled");
 	}else{
-		Log_Message("Echo enabled");
+		Log_Message_FAST("Echo enabled");
 	}
 
 	return 0;
