@@ -5,7 +5,9 @@
 extern "C" {
 #endif
 
-#define IPD_BUFF 128
+#include "message_queue.h"
+
+#define IPD_BUFF 64
 #define MAX_MESSAGE_SIZE 1024*4
 
 typedef struct ipd_parser ipd_parser;
@@ -41,22 +43,22 @@ struct ipd_parser {
   unsigned int errno;
   uint8_t is_data;
 
-  unsigned int conn_id;
+  //unsigned int conn_id;
 
   char buff[IPD_BUFF];
   unsigned int buff_pos;
 
-  unsigned int message_size;
+ // unsigned int message_size;
   unsigned int message_bytes_readed;
-  char* message;
+  //char message[MAX_MESSAGE_SIZE];
 
-  struct ipd_parser* next;
+  message_data* packet;
 };
 
 
 #define HTTP_PARSER_ERRNO(p)            ((enum errno) (p)->errno)
 
-void ipd_parser_init(ipd_parser *parser);
+void ipd_parser_init(ipd_parser *parser, message_data* packet);
 void ipd_parser_free(ipd_parser *parser);
 #ifdef __cplusplus
 }

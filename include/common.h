@@ -19,6 +19,7 @@ typedef void (*functiontype)();
 enum MENU_LAYOUT {EMPTY, LIST};
 
 
+#define FORTH_ENABLED
 #define POOL_SIZE 1024 * 20
 
 #define USE_UMM_MALLOC

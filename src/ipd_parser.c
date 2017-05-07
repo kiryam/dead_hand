@@ -20,9 +20,18 @@ do {                                                                  \
 #define BUFFER_PUSH(V) parser->buff[parser->buff_pos++] = V
 
 
-void ipd_parser_init(ipd_parser *parser){
-	 memset(parser, 0, sizeof(*parser));
+void ipd_parser_init(ipd_parser *parser, message_data* packet){
+	 parser->buff_pos = 0;
+	 parser->errno = 0;
+	 parser->is_data = 0;
+	 parser->message_bytes_readed = 0;
+	 parser->nread = 0;
 	 parser->state = s_conn_id;
+
+	 parser->packet = packet;
+	 parser->packet->conn_id = 0;
+	 parser->packet->message_length = 0;
+
 	 BUFFER_EMPTY();
 }
 
@@ -52,8 +61,8 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 				parser->errno = CONNID_PARSE_ERROR;
 				goto err;
 			}
-			parser->conn_id = atoi(parser->buff);
-			if (parser->conn_id > MAX_PENDING_CONNETION ){
+			parser->packet->conn_id = atoi(parser->buff);
+			if (parser->packet->conn_id > MAX_PENDING_CONNETION ){
 				parser->errno = CONNID_OVERSIZED;
 				goto err;
 			}
@@ -74,8 +83,8 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 			Log_Message_FAST("conn_id data ok");
 			Log_Message_FAST(parser->buff);
 
-			parser->conn_id = atoi(parser->buff);
-			if (parser->conn_id > MAX_PENDING_CONNETION ){
+			parser->packet->conn_id = atoi(parser->buff);
+			if (parser->packet->conn_id > MAX_PENDING_CONNETION ){
 				parser->errno = CONNID_OVERSIZED;
 				goto err;
 			}
@@ -96,26 +105,27 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 			break;
 		}
 		if(byte == ':'){
-			parser->message_size = atoi(parser->buff);
+			parser->packet->message_length = atoi(parser->buff);
 			Log_Message_FAST("message_size ok");
 			Log_Message_FAST(parser->buff);
 
-			if( parser->message_size >= MAX_MESSAGE_SIZE ){
+			if( parser->packet->message_length >= MAX_MESSAGE_SIZE ){
 				parser->errno = MESSAGE_TOO_LONG;
 				goto err;
 			}
 
-			if( parser->message_size <= 0 ){
+			if( parser->packet->message_length <= 0 ){
 				parser->errno = MESSAGE_PARSE_ERRROR;
 				goto err;
 			}
 
-			parser->message = (char*) malloc_c(parser->message_size+1);
-			if ( parser->message == NULL ){
-				parser->errno = OUT_OF_MEMORY;
+			char* message = (char*)malloc_c(sizeof(char)*parser->packet->message_length+1);
+			if (message == NULL){
+				Log_Message("Out of memory");
 				goto err;
 			}
-			//memset(parser->message, 0, parser->message_size+1);
+			parser->packet->message = message;
+
 			UPDATE_STATE(s_message_read);
 			BUFFER_EMPTY();
 		} else {
@@ -125,12 +135,11 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 		break;
 
 	case s_message_read:
-		parser->message[parser->message_bytes_readed++] = byte;
+		parser->packet->message[parser->message_bytes_readed++] = byte;
 
-		if (parser->message_bytes_readed == parser->message_size) {
+		if (parser->message_bytes_readed == parser->packet->message_length) {
 			Log_Message_FAST("readed data");
-			parser->message[parser->message_size] = '\0';
-		//	parser->message_size++; // NULL byte add
+			parser->packet->message[parser->packet->message_length] = '\0';
 			UPDATE_STATE(s_message_done);
 		}
 		break;
@@ -147,17 +156,10 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 		   parser->errno = UNKNOWN;
 	    }
 
-	    if( parser->message != NULL ){
-	    	free_c(parser->message);
-	    }
-
 	    return;
 }
 
 void ipd_parser_free(ipd_parser *parser){
-	if (parser->message != NULL){
-		free_c(parser->message);
-	}
 }
 
 

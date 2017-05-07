@@ -6,7 +6,6 @@ static_style:
  .byte 0
  .size static_style, .-static_style
 
-
  .section ".rodata"
  .globl static_javascript
  .type static_javascript, STT_OBJECT
@@ -14,6 +13,14 @@ static_javascript:
  .incbin "script.js"
  .byte 0
  .size static_javascript, .-static_javascript
+
+  .section ".rodata"
+ .globl static_forth_bootstrap
+ .type static_forth_bootstrap, STT_OBJECT
+static_forth_bootstrap:
+ .incbin "core.zf"
+ .byte 0
+ .size static_forth_bootstrap, .-static_forth_bootstrap
 
  .section ".rodata"
  .globl static_template_page
@@ -46,4 +53,13 @@ static_page_tcl:
  .incbin "page_tcl.html"
  .byte 0
  .size static_page_tcl, .-static_page_tcl
+
+  .section ".rodata"
+ .globl static_page_forth
+ .type static_page_forth, STT_OBJECT
+static_page_forth:
+ .incbin "page_forth.html"
+ .byte 0
+ .size static_page_forth, .-static_page_forth
+
 

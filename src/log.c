@@ -13,8 +13,8 @@ void Log_Message(char* str){
 	#ifdef TRACE
 	trace_printf("%s\r\n",str);
 	return;
-	Log_Message_FAST();
-#endif
+	#endif
+	Log_Message_FAST(str);
 }
 
 void Log_Message_FAST(char* str){

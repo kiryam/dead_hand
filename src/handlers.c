@@ -1,12 +1,21 @@
 #include <stdio.h>
 #include <string.h>
 #include "request.h"
-#include <resources.h>
+#include "resources.h"
 #include "wifi.h"
 #include "display.h"
 #include "wifi_status.h"
 #include "relay.h"
 #include "common.h"
+
+#ifdef FORTH_ENABLED
+#include "zforth.h"
+#endif
+
+#ifdef TCL_ENABLED
+#include "tcl.h"
+#endif
+
 
 #ifdef USE_UMM_MALLOC
 #include "umm_malloc.h"
@@ -20,9 +29,18 @@ int handle_request(Request* request, char* response){
 		handler_index(request, response_page);
 	} else if( strcmp("/manage", request->path) == 0 ){
 		handler_manage(request, response_page);
-	} else if( strncmp("/tcl", request->path, 4) == 0 ){
+	}
+	#ifdef TCL_ENABLED
+		else if( strncmp("/tcl", request->path, 4) == 0 ){
 		handler_tcl(request, response_page);
-	}else if(strncmp("/memory", request->path, 7) ==0){
+	}
+	#endif
+	#ifdef FORTH_ENABLED
+	else if( strncmp("/forth", request->path, 4) == 0 ){
+		handler_forth(request, response_page);
+	}
+	#endif
+	else if(strncmp("/memory", request->path, 7) ==0){
 		handler_memory(request, response_page);
 	} else if(strncmp("/metrics", request->path, 8) ==0){
 		handler_metrics(request, response_page);
@@ -57,7 +75,7 @@ int page_index(char* page_index, char* content){
 }
 
 void handler_index(Request* request,  char* response) {
-	Log_Message("index");
+	Log_Message_FAST("index");
 	page_index(response, "<h2 class=\"sub-header\">Dashboard</h2><div class=\"table-responsive\"></div>");
 }
 
@@ -84,7 +102,7 @@ void handler_get_ap_list(Request* request,  char* response){
 			char line[256]={0};
 			sprintf(line, "%s\n", point->name);
 			strcat(response, line);
-			Log_Message(point->name);
+			//Log_Message(point->name);
 		}
 	}
 
@@ -129,15 +147,15 @@ void handler_manage(Request* request, char* response){
 	page_index(response, manage_response);
 }
 
+#ifdef TCL_ENABLED
 void handler_tcl(Request* request, char* response){
 	if( request->type == POST ) {
-		char s[4096] = {0};
+		char s[REQUEST_DATA_VALUE_LEN] = {0};
 		if (request_get_post_field(request, "code", s) != 0){
 			sprintf(response, "CODE_FIELD_NOT_FOUND");
 			return;
 		}
 
-		/*
 		struct tcl tcl;
 		tcl_init(&tcl);
 
@@ -147,12 +165,80 @@ void handler_tcl(Request* request, char* response){
 		    return;
 		}
 		tcl_destroy(&tcl);
-		*/
+
 		sprintf(response, "ERROR");
 		return;
 	}
 	page_index(response, static_page_tcl);
 }
+#endif
+
+#ifdef FORTH_ENABLED
+void handler_forth(Request* request, char* response){
+	if( request->type == POST ) {
+		char s[REQUEST_DATA_VALUE_LEN] = {0};
+		if (request_get_post_field(request, "code", s) != 0){
+			sprintf(response, "CODE_FIELD_NOT_FOUND");
+			return;
+		}
+
+		//forth_answer[0] = '\0';
+
+		zf_result r = zf_eval(s);
+		if(r != ZF_OK) {
+			switch (r) {
+			case ZF_ABORT_INTERNAL_ERROR:
+				sprintf(response, "ZF_ABORT_INTERNAL_ERROR");
+				break;
+
+			case ZF_ABORT_OUTSIDE_MEM:
+				sprintf(response, "ZF_ABORT_OUTSIDE_MEM");
+				break;
+
+			case ZF_ABORT_DSTACK_UNDERRUN:
+				sprintf(response, "ZF_ABORT_DSTACK_UNDERRUN");
+				break;
+
+			case ZF_ABORT_DSTACK_OVERRUN:
+				sprintf(response, "ZF_ABORT_DSTACK_OVERRUN");
+				break;
+
+			case ZF_ABORT_RSTACK_UNDERRUN:
+				sprintf(response, "ZF_ABORT_RSTACK_UNDERRUN");
+				break;
+
+			case ZF_ABORT_RSTACK_OVERRUN:
+					sprintf(response, "ZF_ABORT_RSTACK_OVERRUN");
+					break;
+
+			case ZF_ABORT_NOT_A_WORD:
+					sprintf(response, "ZF_ABORT_NOT_A_WORD");
+					break;
+
+			case ZF_ABORT_COMPILE_ONLY_WORD:
+					sprintf(response, "ZF_ABORT_COMPILE_ONLY_WORD");
+					break;
+
+			case ZF_ABORT_INVALID_SIZE:
+					sprintf(response, "ZF_ABORT_INVALID_SIZE");
+				break;
+			}
+
+			return;
+		}
+
+		forth_answer[forth_answer_cursor] = '\0';
+		strncpy(response, forth_answer, FORTH_ANSWER_MAX_LENGTH);
+		strcat(response, " ok");
+
+		forth_answer[0] = '\0';
+		forth_answer_cursor = 0;
+		return;
+	}
+	page_index(response, static_page_forth);
+}
+
+#endif
 
 
 
@@ -197,17 +283,17 @@ void handler_memory(Request* request, char* response){
 }
 
 void handler_favicon(Request* request, char* response){
-	Log_Message("Favicon");
+	Log_Message_FAST("Favicon");
 	strcpy(response, "Favicon");
 	// TODO
 }
 
 void handler_404(Request* request, char* response){
-	Log_Message("404");
+	Log_Message_FAST("404");
 	strcpy(response, "404 Page not found");
 }
 
 void handler_metrics(Request* request, char* response){
-	Log_Message("metric");
+	Log_Message_FAST("metric");
 	sprintf(response, "memory_used %d\nmemory_max_used %d\n", get_memory_allocated_total(), get_memory_max());
 }

@@ -102,6 +102,12 @@ _PTR malloc_c(size_t size) {
 #endif
 }
 
+_PTR realloc_c( void *ptr, size_t size) {
+#ifdef USE_UMM_MALLOC
+	return umm_realloc(ptr, size);
+#endif
+}
+
 void free_c(_PTR p) {
 #ifdef USE_UMM_MALLOC
 	umm_free( p );

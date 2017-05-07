@@ -14,12 +14,12 @@ static unsigned int message_data_cursors[MAX_PENDING_CONNETION*2] = {0};
 
 static message_data* message_data_payload_queue[MAX_PENDING_CONNETION] = {0};
 
-void ipd_queue_payload_add(unsigned int conn_id, char* buff, size_t length){
-	if (message_data_payload_queue[conn_id] != NULL) {
+void ipd_queue_payload_add(message_data* packet){
+	if (message_data_payload_queue[packet->conn_id] != NULL) {
 		Log_Message("Payload overflow");
 	}
 
-	message_data* packet=(message_data*)malloc_c(sizeof(message_data));
+	/*message_data* packet=(message_data*)malloc_c(sizeof(message_data));
 	if (packet == NULL){
 		Log_Message("Out of memory");
 		return;
@@ -36,8 +36,9 @@ void ipd_queue_payload_add(unsigned int conn_id, char* buff, size_t length){
 	packet->conn_id = conn_id;
 	packet->message_length = length;
 	packet->message = msg;
+	*/
 
-	message_data_payload_queue[conn_id] = packet;
+	message_data_payload_queue[packet->conn_id] = packet;
 }
 
 message_data* ipd_queue_get_payload(unsigned int conn_id){
@@ -54,8 +55,8 @@ message_data* ipd_queue_get_payload(unsigned int conn_id){
 // TODO CONN_ID
 // message_data_cursors[conn_id << 0] // read_cursor
 // message_data_cursors[conn_id << 1] // write_cursor
-void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
-	unsigned int* write_cursor = &message_data_cursors[(conn_id<<1)+1];
+void ipd_queue_add(message_data* packet){
+	unsigned int* write_cursor = &message_data_cursors[(packet->conn_id<<1)+1];
 	if (*write_cursor >= MAX_PENDING_DATA) {
 		*write_cursor = 0;
 	}
@@ -66,6 +67,7 @@ void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
 		message_data_queue[*write_cursor] = NULL;
 	}
 
+	/*
 	message_data* packet=(message_data*)malloc_c(sizeof(message_data));
 	if (packet == NULL){
 		Log_Message("Out of memory");
@@ -77,11 +79,12 @@ void ipd_queue_add(unsigned int conn_id, char* buff, size_t length){
 		free_c(packet);
 		return;
 	}
-	strncpy(msg, buff, length);
+	memcpy(msg, buff, length);
 
 	packet->conn_id = conn_id;
 	packet->message_length = length;
 	packet->message = msg;
+	*/
 
 	message_data_queue[*write_cursor] = packet;
 	*write_cursor=*write_cursor+1;

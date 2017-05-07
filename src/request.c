@@ -3,6 +3,9 @@
 #include "log.h"
 #include "http_parser.h"
 #include "picohttpparser.h"
+#include <stdlib.h>
+#include <ctype.h>
+
 
 int request_parse(Request* request, char* data, unsigned int length){
 	char *method, *path;
@@ -16,6 +19,9 @@ int request_parse(Request* request, char* data, unsigned int length){
 	if (pret == -1){
 		Log_Message("Request ParseError");
 		goto fail;
+	}
+	if (length - pret != 0){
+		request_parse_payload(request, &data[pret]);
 	}
 
 	strncpy(request->path, path, path_len);
@@ -33,6 +39,10 @@ int request_parse(Request* request, char* data, unsigned int length){
 		}
 		strncpy(header->key, headers[i].name, headers[i].name_len);
 		strncpy(header->value, headers[i].value, headers[i].value_len);
+
+		if ( strncmp(header->key, "Content-Length", 14) == 0 ){
+			request->content_length = atoi(header->value);
+		}
 
 		request->headers[request->headers_count++] = header;
 	}
@@ -73,4 +83,64 @@ int request_get_post_field(Request* request, char* field_name, char* field_value
 	}
 
 	return 1;
+}
+
+void request_parse_payload(Request* request, char* data){
+	char *token;
+	char *search = "&";
+	char *search2 = "=";
+
+	token = strtok(data, search);
+	while(token != NULL){
+		char* key;
+		char* value;
+		char decoded[REQUEST_DATA_VALUE_LEN] ={0};
+
+		key = strtok(token, search2);
+		value = strtok(NULL, search2);
+		urldecode2(decoded, value);
+
+		Request_Data* data_entry = (Request_Data*)malloc_c(sizeof(Request_Data));
+		if(data_entry == NULL){
+			Log_Message("Out of memory");
+			return;
+		}
+
+		strncpy(data_entry->key, key, REQUEST_DATA_KEY_LEN);
+		strncpy(data_entry->value, decoded, REQUEST_DATA_VALUE_LEN);
+		request->data[request->data_count++] = data_entry;
+
+		token = strtok(NULL, search);
+	}
+
+}
+
+void urldecode2(char *dst, const char *src){
+	char a, b;
+	while (*src) {
+			if ((*src == '%') &&
+				((a = src[1]) && (b = src[2])) &&
+				(isxdigit(a) && isxdigit(b))) {
+					if (a >= 'a')
+							a -= 'a'-'A';
+					if (a >= 'A')
+							a -= ('A' - 10);
+					else
+							a -= '0';
+					if (b >= 'a')
+							b -= 'a'-'A';
+					if (b >= 'A')
+							b -= ('A' - 10);
+					else
+							b -= '0';
+					*dst++ = 16*a+b;
+					src+=3;
+			} else if (*src == '+') {
+					*dst++ = ' ';
+					src++;
+			} else {
+					*dst++ = *src++;
+			}
+	}
+	*dst++ = '\0';
 }

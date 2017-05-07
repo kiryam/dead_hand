@@ -9,6 +9,11 @@
 #include <stdlib.h>
 #include "log.h"
 #include "server.h"
+#include "resources.h"
+
+#ifdef FORTH_ENABLED
+#include "zforth.h"
+#endif
 
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -16,10 +21,78 @@
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
 
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
+#ifdef FORTH_ENABLED
+
+zf_input_state zf_host_sys(zf_syscall_id id, const char *input) {
+	char buf[16];
+	void* buf1;
+
+	switch((int)id) {
+		case ZF_SYSCALL_EMIT:
+			// TODO: check forth_answer buff overflow
+			zf_cell cell;
+			cell = zf_pop();
+			forth_answer[forth_answer_cursor++] = (char)cell;
+			break;
+
+		case ZF_SYSCALL_PRINT:
+			// TODO: check forth_answer buff overflow
+			itoa(zf_pop(), buf, 10);
+			size_t len1;
+			len1 = strlen(buf);
+			strncpy(&forth_answer[forth_answer_cursor], buf, len1);
+			forth_answer_cursor += len1;
+			break;
+
+		case ZF_SYSCALL_TELL:
+			// TODO: check forth_answer buff overflow
+			zf_cell len;
+			len = zf_pop();
+
+			buf1 = (uint8_t *)zf_dump(NULL) + (int)zf_pop();
+			strncpy(&forth_answer[forth_answer_cursor], (char*)buf1, len);
+			forth_answer_cursor += len;
+
+			break;
+
+		case ZF_SYSCALL_USER:
+			NVIC_SystemReset();
+			break;
+
+		case ZF_SYSCALL_USER+1:
+			RELAY_On();
+			break;
+
+		case ZF_SYSCALL_USER+2:
+			RELAY_Off();
+			break;
+
+		case ZF_SYSCALL_USER+3:
+			LED_On();
+			break;
+
+		case ZF_SYSCALL_USER+4:
+			LED_Off();
+			break;
+	}
+
+	return ZF_INPUT_INTERPRET;
+}
+
+zf_cell zf_host_parse_num(const char *buf) {
+	char *end;
+        zf_cell v = strtol(buf, &end, 0);
+	if(*end != '\0') {
+                zf_abort(ZF_ABORT_NOT_A_WORD);
+        }
+        return v;
+}
+#endif
 
 void TIM2_IRQHandler() {
 	if (TIM_GetITStatus(TIM2, TIM_IT_Update) != RESET) {
@@ -51,29 +124,41 @@ void BCKP_Init(){
 }
 
 void NVIC_Init(){
-	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_2);
+	NVIC_PriorityGroupConfig(NVIC_PriorityGroup_3);
+
+	NVIC_InitTypeDef NVIC_InitStructure_SysTick;
+	NVIC_InitStructure_SysTick.NVIC_IRQChannel = SysTick_IRQn;
+	NVIC_InitStructure_SysTick.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure_SysTick.NVIC_IRQChannelSubPriority = 0;
+	NVIC_InitStructure_SysTick.NVIC_IRQChannelCmd = ENABLE;
+	NVIC_Init(&NVIC_InitStructure_SysTick);
 
 	NVIC_InitTypeDef NVIC_InitStructure_USART1;
 	NVIC_InitStructure_USART1.NVIC_IRQChannel = USART1_IRQn;
-	NVIC_InitStructure_USART1.NVIC_IRQChannelPreemptionPriority = 0;
+	NVIC_InitStructure_USART1.NVIC_IRQChannelPreemptionPriority = 1;
 	NVIC_InitStructure_USART1.NVIC_IRQChannelSubPriority = 0;
 	NVIC_InitStructure_USART1.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_USART1);
 
+	/*
+	// Commands Listeners
 	NVIC_InitTypeDef NVIC_InitStructure_TIM6;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannel = TIM6_DAC_IRQn;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannelPreemptionPriority = 2;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannelSubPriority = 0;
 	NVIC_InitStructure_TIM6.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_TIM6);
+	*/
 
+	// Http routines
 	NVIC_InitTypeDef NVIC_InitStructure_TIM7;
 	NVIC_InitStructure_TIM7.NVIC_IRQChannel = TIM7_IRQn;
-	NVIC_InitStructure_TIM7.NVIC_IRQChannelPreemptionPriority = 3;
+	NVIC_InitStructure_TIM7.NVIC_IRQChannelPreemptionPriority = 2;
 	NVIC_InitStructure_TIM7.NVIC_IRQChannelSubPriority = 2;
 	NVIC_InitStructure_TIM7.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_TIM7);
 
+	// Display update
 	NVIC_InitTypeDef NVIC_InitStructure_TIM2;
 	NVIC_InitStructure_TIM2.NVIC_IRQChannel = TIM2_IRQn;
 	NVIC_InitStructure_TIM2.NVIC_IRQChannelPreemptionPriority = 3;
@@ -89,12 +174,20 @@ void RenderTimer_Init(){
 
 
 	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 1000/1;
+	base_timer.TIM_Period = 1000/10;
 	TIM_TimeBaseInit(TIM2, &base_timer);
 
 	TIM_ITConfig(TIM2, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM2, ENABLE);
 }
+
+#ifdef FORTH_ENABLED
+void Forth_Init(){
+	zf_init(1);
+	zf_bootstrap();
+	zf_eval(static_forth_bootstrap);
+}
+#endif
 
 int main(int argc, char* argv[]) {
 	SysTick_Init();
@@ -108,18 +201,18 @@ int main(int argc, char* argv[]) {
 	IWDG_SetReload(1000);
 	IWDG_ReloadCounter();
 	IWDG_Enable(); // TODO enable on release
-	Log_Message("Watchdog ok");
+	Log_Message_FAST("Watchdog ok");
 #else
-	Log_Message("Watchdog disabled");
+	Log_Message_FAST("Watchdog disabled");
 #endif
 
 	int btn_state = 0;
 	LED_Init();
-	Log_Message("Led ok");
+	Log_Message_FAST("Led ok");
 	RELAY_Init();
-	Log_Message("Relay ok");
+	Log_Message_FAST("Relay ok");
 	BTN_Init();
-	Log_Message("Btn ok");
+	Log_Message_FAST("Btn ok");
 
 	LED_On();
 	sleepMs(500);
@@ -132,13 +225,16 @@ int main(int argc, char* argv[]) {
 	LED_On();
 	sleepMs(500);
 	LED_Off();
+
+
+	#ifdef FORTH_ENABLED
+	Forth_Init();
+	#endif
 
 	Display_Init();
-	Log_Message("Display ok");
+	Log_Message_FAST("Display ok");
 
 	RenderTimer_Init();
-
-
 
 	WIFI_Init();
 	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {

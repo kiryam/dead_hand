@@ -48,6 +48,8 @@ typedef struct {
 	int data_count;
 	char path[REQUEST_MAX_PATH_LEN];
 	char proto[REQUEST_MAX_PROTO_LEN];
+	unsigned int content_length;
+
 	Request_Header* headers[REQUEST_MAX_HEADER_COUNT];
 	Request_Data * data[REQUEST_MAX_DATA_COUNT];
 
@@ -56,6 +58,7 @@ typedef struct {
 
 int request_parse(Request* request, char* data, unsigned int length);
 void request_free(Request* request);
+void urldecode2(char *dst, const char *src);
 
 #ifdef __cplusplus
 }

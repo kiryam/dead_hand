@@ -6,8 +6,6 @@
 #include "ipd_parser.h"
 #include "handlers.h"
 #include "log.h"
-
-
 #include "wifi.h"
 
 int server_status = -1;
@@ -95,6 +93,16 @@ void TIM7_IRQHandler() {
 				free_c(ipd_raw_message);
 				return;
 			}
+
+			if (request.content_length != 0){
+				message_data* payload_raw_message = ipd_queue_get_payload(conn_id);
+				if( payload_raw_message != NULL ) {
+					request_parse_payload(&request, payload_raw_message->message);
+					free_c(payload_raw_message->message);
+					free_c(payload_raw_message);
+				}
+			}
+
 			free_c(ipd_raw_message->message);
 			free_c(ipd_raw_message);
 
@@ -135,27 +143,8 @@ void TIM7_IRQHandler() {
     }
 }
 
-void func_wifi_on_new_line(char* line){
-	if (strncmp(&line[2], "CONNECT", 7) == 0) {
-		pending_connection_push(atoi(&line[0]));
-	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
-		char ch[3]={0};
-		strncpy(ch, line, 2);
-		pending_connection_push(atoi(ch));
-	} else if (strncmp(&line[2], "CLOSED", 6) == 0) {
-		pending_disconnection_push(atoi(&line[0]));
-	} else if(strncmp(&line[3], "CLOSED", 6) == 0 ){
-		char ch[3]={0};
-		strncpy(ch, line, 2);
-		pending_disconnection_push(atoi(ch));
-	}
-}
-
-
 int WIFI_Server_Start(int port){
 	WIFI_Server_Timer_Init();
-	remove_newline_callback((callback)func_wifi_on_new_line);
-	add_newline_callback((callback)func_wifi_on_new_line);
 
 	if ( WIFI_Set_CIPSERVER(0, 0) ){
 		Log_Message("CIPSERVER=0 ERROR");
