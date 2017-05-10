@@ -106,11 +106,11 @@ void TIM7_IRQHandler() {
 			free_c(ipd_raw_message->message);
 			free_c(ipd_raw_message);
 
-			char response[RESPONSE_MAX_LEN+512] = {0};
+			uint8_t response[RESPONSE_MAX_LEN+512] = {0};
 			int bytes_pending = handle_request(&request, response);
 			request_free(&request);
 
-			char* response_ptr = response;
+			uint8_t* response_ptr = response;
 
 			char tmp_log[128] = {0};
 

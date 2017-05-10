@@ -128,7 +128,8 @@ void USART1_IRQHandler(void) {
 		#ifdef PROTO_LOG
 			protocol_log_byte(byte, DIR_IN);
 		#endif
-		if( recv_message_data_started == 1){
+		if( recv_message_data_started == 1) {
+			wifi_buff_pos=0;
 			ipd_parser_execute(&parser, byte);
 
 			if ( parser.errno != OK ){
@@ -153,7 +154,6 @@ void USART1_IRQHandler(void) {
 				#endif
 				recv_message_data_started = 0;
 				wifi_buff[0] = '\0';
-				wifi_buff_pos=0;
 				return;
 			} else if ( parser.state == s_message_done ){
 				char ch[64] = {0};
@@ -166,7 +166,6 @@ void USART1_IRQHandler(void) {
 				}
 				ipd_parser_free(&parser);
 				wifi_buff[0] = '\0';
-				wifi_buff_pos=0;
 				recv_message_data_started = 0;
 				return;
 			}
@@ -194,7 +193,7 @@ void USART1_IRQHandler(void) {
 			} else if(strncmp(wifi_buff, "WIFI CONNECTED\r\n", 16) == 0){
 				Log_Message("WIFI CONNECTED");
 			} else if(strncmp(wifi_buff, "DISCO", 5) == 0){
-				Log_Message("WIFI DISCO");
+				Log_Message("WIFI DISCO"); // TODO
 				Log_Message(wifi_buff);
 			} else if (strncmp(&wifi_buff[2], "CONNECT", 7) == 0) {
 				Log_Message_FAST("CONNECT");
@@ -210,10 +209,10 @@ void USART1_IRQHandler(void) {
 			return;
 		}
 
-		if( strncmp("+IPD,", wifi_buff, 5) == 0 ){
+		if( wifi_buff_pos == 5 && strncmp("+IPD,", wifi_buff, 5) == 0 ){
 			Log_Message_FAST("IPD Parse started");
 			recv_message_data_started = 1;
-			wifi_buff_pos = 0;
+
 			message_data* packet = (message_data*)malloc_c(sizeof(message_data));
 			if (packet == NULL){
 				Log_Message("Out of memory");
@@ -601,7 +600,7 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 	WIFI_Send_Command("AT+CWLAP\r\n", 0);
 
 	char answer[500] = {0};
-	if ( WIFI_Read_Line(answer, 100, 100) == 1 ){
+	if ( WIFI_Read_Line(answer, 100, 10000) == 1 ){
 		return 1;
 	}
 
@@ -613,7 +612,7 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 
 	int readed_count=MAX_POINTS_COUNT;
 	while( (readed_count--) > 0){
-		if ( WIFI_Read_Line(answer, 100, 100) == 1 ){
+		if ( WIFI_Read_Line(answer, 100, 1000) == 1 ){
 			Log_Message("Points retrieve loop went too long");
 			return 0;
 		}
@@ -630,8 +629,8 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 			}
 
 			if ( WIFI_Parse_Point_Answer(answer, point) == 0 ){
-				Log_Message("Parsed ok");
-				Log_Message(point->name);
+				Log_Message_FAST("Parsed ok");
+				Log_Message_FAST(point->name);
 				result->points[result->found++] = point;
 			}else{
 				free_c(point);

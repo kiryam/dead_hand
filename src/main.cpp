@@ -129,22 +129,14 @@ void NVIC_Init(){
 	NVIC_InitStructure_SysTick.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_SysTick);
 
+	NVIC_SetPriority(SysTick_IRQn, 0);
+
 	NVIC_InitTypeDef NVIC_InitStructure_USART1;
 	NVIC_InitStructure_USART1.NVIC_IRQChannel = USART1_IRQn;
 	NVIC_InitStructure_USART1.NVIC_IRQChannelPreemptionPriority = 1;
 	NVIC_InitStructure_USART1.NVIC_IRQChannelSubPriority = 0;
 	NVIC_InitStructure_USART1.NVIC_IRQChannelCmd = ENABLE;
 	NVIC_Init(&NVIC_InitStructure_USART1);
-
-	/*
-	// Commands Listeners
-	NVIC_InitTypeDef NVIC_InitStructure_TIM6;
-	NVIC_InitStructure_TIM6.NVIC_IRQChannel = TIM6_DAC_IRQn;
-	NVIC_InitStructure_TIM6.NVIC_IRQChannelPreemptionPriority = 2;
-	NVIC_InitStructure_TIM6.NVIC_IRQChannelSubPriority = 0;
-	NVIC_InitStructure_TIM6.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&NVIC_InitStructure_TIM6);
-	*/
 
 	// Http routines
 	NVIC_InitTypeDef NVIC_InitStructure_TIM7;
