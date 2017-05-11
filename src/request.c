@@ -86,18 +86,15 @@ int request_get_post_field(Request* request, char* field_name, char* field_value
 }
 
 void request_parse_payload(Request* request, char* data){
-	char *token;
-	char *search = "&";
-	char *search2 = "=";
+	char *end_str;
+	char *token = strtok_r(data, "&", &end_str);
 
-	token = strtok(data, search);
 	while(token != NULL){
-		char* key;
-		char* value;
 		char decoded[REQUEST_DATA_VALUE_LEN] ={0};
+	    char *end_token;
 
-		key = strtok(token, search2);
-		value = strtok(NULL, search2);
+	    char* key = strtok_r(token, "=", &end_token);
+	    char* value = strtok_r(NULL, "=", &end_token);
 		urldecode2(decoded, value);
 
 		Request_Data* data_entry = (Request_Data*)malloc_c(sizeof(Request_Data));
@@ -110,9 +107,8 @@ void request_parse_payload(Request* request, char* data){
 		strncpy(data_entry->value, decoded, REQUEST_DATA_VALUE_LEN);
 		request->data[request->data_count++] = data_entry;
 
-		token = strtok(NULL, search);
+		token = strtok_r(NULL, "&", &end_str);
 	}
-
 }
 
 void urldecode2(char *dst, const char *src){

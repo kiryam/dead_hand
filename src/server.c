@@ -59,7 +59,7 @@ void WIFI_Server_Timer_Init() {
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
 	base_timer.TIM_Prescaler = 24000 - 1;;
-	base_timer.TIM_Period = 200;
+	base_timer.TIM_Period = 300;
 	TIM_TimeBaseInit(TIM7, &base_timer);
 	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM7, ENABLE);
@@ -95,7 +95,11 @@ void TIM7_IRQHandler() {
 			}
 
 			if (request.content_length != 0){
-				message_data* payload_raw_message = ipd_queue_get_payload(conn_id);
+				message_data* payload_raw_message;
+				payload_raw_message = ipd_queue_get_payload(conn_id);
+				if ( payload_raw_message == NULL ) {
+					payload_raw_message = ipd_queue_get_by_conn_id(conn_id);
+				}
 				if( payload_raw_message != NULL ) {
 					request_parse_payload(&request, payload_raw_message->message);
 					free_c(payload_raw_message->message);

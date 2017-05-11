@@ -160,7 +160,8 @@ void USART1_IRQHandler(void) {
 				sprintf(ch, "Readed %d bytes", parser.message_bytes_readed);
 				Log_Message_FAST(ch);
 				if (parser.is_data){
-					ipd_queue_payload_add(parser.packet);
+					Log_Message("ERROR Deprecated message");
+					//ipd_queue_payload_add(parser.packet);
 				} else {
 					ipd_queue_add(parser.packet);
 				}
@@ -777,7 +778,7 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 		}
 
 	if( strncmp("busy", answer, 4) == 0 ){
-		Log_Message("Busy.. going to step1 (from step2)");
+		Log_Message_FAST("Busy.. going to step1 (from step2)");
 		for(int n=10000;n>0;n--){}
 		goto step1;
 	}

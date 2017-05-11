@@ -12,7 +12,7 @@ extern "C" {
 
 
 #define MAX_PENDING_CONNETION 5
-#define MAX_PENDING_DATA 3
+#define MAX_PENDING_DATA 10
 #define MAX_DATA_IN_QUEUE MAX_PENDING_CONNETION*MAX_PENDING_DATA
 
 typedef struct {

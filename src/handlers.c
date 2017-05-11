@@ -27,8 +27,6 @@
 #endif
 
 int handle_request(Request* request, uint8_t* response){
-	UNUSED(request);
-
 	uint8_t response_page[RESPONSE_MAX_LEN] = {0};
 	size_t response_bytes = 0;
 
@@ -134,8 +132,6 @@ int handler_get_ap_list(Request* request,  char* response) {
 }
 
 int handler_ap_connect(Request* request,  char* response) {
-	UNUSED(request);
-
 	if( request->type == POST ) {
 		char* ssid[REQUEST_DATA_VALUE_LEN] ={0};
 		char* password[REQUEST_DATA_VALUE_LEN] ={0};

@@ -48,8 +48,6 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 			break;
 		}
 		if(byte == ','){
-			Log_Message_FAST("conn_id ok");
-			Log_Message_FAST(parser->buff);
 			if( parser->buff[0] == 'D' ){
 				//parser->conn_id = 100; // TODO?
 				UPDATE_STATE(s_conn_id_data);
@@ -80,9 +78,6 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 			break;
 		}
 		if(byte == ','){
-			Log_Message_FAST("conn_id data ok");
-			Log_Message_FAST(parser->buff);
-
 			parser->packet->conn_id = atoi(parser->buff);
 			if (parser->packet->conn_id > MAX_PENDING_CONNETION ){
 				parser->errno = CONNID_OVERSIZED;
@@ -106,8 +101,6 @@ void ipd_parser_execute(ipd_parser *parser, char byte){
 		}
 		if(byte == ':'){
 			parser->packet->message_length = atoi(parser->buff);
-			Log_Message_FAST("message_size ok");
-			Log_Message_FAST(parser->buff);
 
 			if( parser->packet->message_length >= MAX_MESSAGE_SIZE ){
 				parser->errno = MESSAGE_TOO_LONG;
