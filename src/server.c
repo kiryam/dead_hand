@@ -84,7 +84,7 @@ void TIM7_IRQHandler() {
 
 		message_data* ipd_raw_message = ipd_queue_get();
 		if (ipd_raw_message != NULL){
-			int conn_id = ipd_raw_message->conn_id;
+			unsigned int conn_id = ipd_raw_message->conn_id;
 			Request request = {0};
 
 			if( request_parse(&request, ipd_raw_message->message, ipd_raw_message->message_length) != 0){
@@ -94,12 +94,8 @@ void TIM7_IRQHandler() {
 				return;
 			}
 
-			if (request.content_length != 0){
-				message_data* payload_raw_message;
-				payload_raw_message = ipd_queue_get_payload(conn_id);
-				if ( payload_raw_message == NULL ) {
-					payload_raw_message = ipd_queue_get_by_conn_id(conn_id);
-				}
+			if (request.content_length != 0) {
+				message_data* payload_raw_message = (message_data*)ipd_queue_get_by_conn_id(conn_id);
 				if( payload_raw_message != NULL ) {
 					request_parse_payload(&request, payload_raw_message->message);
 					free_c(payload_raw_message->message);

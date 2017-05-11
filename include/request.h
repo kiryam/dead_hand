@@ -60,6 +60,8 @@ int request_parse(Request* request, char* data, unsigned int length);
 void request_free(Request* request);
 void urldecode2(char *dst, const char *src);
 
+void request_parse_payload(Request* request, char* data);
+
 #ifdef __cplusplus
 }
 #endif

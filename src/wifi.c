@@ -788,26 +788,8 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 
 	if ( strncmp(validate, answer, 32) != 0){
 		retry_remained--;
-		//Log_Message("=========\r\nValidate failed");
-		//Log_Message(answer);
-		//Log_Message("=========");
 		goto step2;
 	}
-
-	/*
-	is_send_ok = 0;
-	int n;
-	int wait_retry_count = 10;
-	while(!is_send_ok && wait_retry_count--) {
-		n = 10000;
-		while(n--);
-	}
-
-	if ( is_send_ok != 1 ){
-		Log_Message("Send not OK");
-		return 1;
-	}
-	*/
 
 	return 0;
 }
