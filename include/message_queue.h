@@ -21,6 +21,8 @@ void ipd_queue_add(message_data* packet);
 
 message_data* ipd_queue_get();
 message_data* ipd_queue_get_by_conn_id(unsigned int conn_id);
+void newline_queue_add(char*);
+char* newline_queue_get();
 
 #ifdef __cplusplus
 }

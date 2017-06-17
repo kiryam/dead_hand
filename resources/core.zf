@@ -1,15 +1,25 @@
 ( system calls )
 
-: emit    0 sys ;
-: .       1 sys ;
-: tell    2 sys ;
-: reset    128 sys ;
-: relay_on 129 sys ;
-: relay_off 130 sys ;
-: led_on 131 sys ;
-: led_off 132 sys ;
+: emit                         0 sys ;
+: .                            1 sys ;
+: tell                         2 sys ;
+: reset                        128 sys ;
+: _relay_on                    129 sys ;
+: _relay_off                   130 sys ;
+: _led_on                      131 sys ;
+: _led_off                     132 sys ;
+: _wifi_tcp_connect            133 sys ;
+: _wifi_tcp_send_byte          134 sys ;
+: _wifi_send_bytes             136 sys ;
+: _wifi_read_line              137 sys ;
 
+: relay_on _relay_on ;
+: relay_off _relay_off ;
+: led_on _led_on ; 
+: led_off _led_off ;
 
+: tcp_connect ( host, port -- conn_id ) _wifi_tcp_connect ;
+: tcp_send_byte ( conn_id, byte -- ) _wifi_tcp_send_byte ;
 
 ( dictionary access. These are shortcuts through the primitive operations are !!, @@ and ,, )
 
@@ -17,6 +27,10 @@
 : @    0 @@ ;
 : ,    0 ,, ;
 : #    0 ## ;
+
+: CELL 8 ;
+: CELLS CELL * ;
+: ? @ . ;
 
 
 ( compiler state )
@@ -88,8 +102,7 @@
      fi ; immediate
 
 
-." Welcome to zForth, " here . ." bytes used" cr ;
-
+." Welcome to zForth, " here . ."  bytes used" cr ;
 
 
 ( methods for handling the dictionary )
@@ -104,8 +117,20 @@
 : name dup @ 31 & swap next dup next rot tell @ ;
 : words latest @ begin name 32 emit dup 0 = until cr drop ;
 
+: relay_on ." Relay on" _relay_on ;
+: relay_off ." Relay off" _relay_off ;
 
 (
 vi: ts=3 sw=3 ft=forth
 )
 
+: wifi_send_and_get_answer _wifi_send_bytes _wifi_read_line _wifi_read_line  ; 
+
+: wifi_at s" AT" wifi_send_and_get_answer ;
+: wifi_at_gmr s" AT+GMR" wifi_send_and_get_answer ;
+: wifi_at_cwlif s" AT+CWLIF" wifi_send_and_get_answer;
+
+: wifi_print != if else ." timeouted" fi ;
+
+
+: print 0 over do ." hello" loop ; 

@@ -10,6 +10,7 @@
 #include "log.h"
 #include "server.h"
 #include "resources.h"
+#include "diag/Trace.h"
 
 #ifdef FORTH_ENABLED
 #include "zforth.h"
@@ -20,16 +21,21 @@
 #pragma GCC diagnostic ignored "-Wmissing-declarations"
 #pragma GCC diagnostic ignored "-Wreturn-type"
 
-
-
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #ifdef FORTH_ENABLED
 
+#if ZF_ENABLE_TRACE
+void zf_host_trace(const char *fmt, va_list va){
+	trace_printf(fmt, va);
+}
+#endif
+
 zf_input_state zf_host_sys(zf_syscall_id id, const char *input) {
-	char buf[16];
+	char buf[128];
+	char answer[512]={0};
 	void* buf1;
 	zf_cell len;
 
@@ -74,6 +80,49 @@ zf_input_state zf_host_sys(zf_syscall_id id, const char *input) {
 
 		case ZF_SYSCALL_USER+4:
 			LED_Off();
+			break;
+
+		case ZF_SYSCALL_USER+5:
+			len = zf_pop();
+			buf1 = (uint8_t *)zf_dump(NULL) + (int)zf_pop();
+			strncpy(buf, (char*)buf1, len);
+
+			unsigned int port;
+			port = zf_pop();
+
+			zf_push(WIFI_TCP_Connect(buf, port));
+			break;
+
+		case ZF_SYSCALL_USER+6:
+			unsigned int conn_id;
+			conn_id = zf_pop();
+			uint8_t byte[1];
+			byte[0] = zf_pop();
+
+			WIFI_TCP_Send(conn_id, byte, 1);
+
+			break;
+		case ZF_SYSCALL_USER+8: //send_bytes
+			len = zf_pop();
+			buf1 = (uint8_t *)zf_dump(NULL) + (int)zf_pop();
+			strncpy(buf, (char*)buf1, len);
+			buf[len++] = '\r';
+			buf[len++] = '\n';
+			buf[len] = '\0';
+			is_new_line=0;
+			WIFI_Send_Bytes((uint8_t*)buf, len, 0);
+			break;
+		case ZF_SYSCALL_USER+9: // read_line
+			if (WIFI_Read_Line(answer, 100, 1000) != 0 ){
+				zf_push(1);
+			} else {
+				Log_Message(answer);
+				char fstring[1024] = {0};
+				sprintf(fstring, "s\" %s\"", answer);
+				zf_eval(fstring);
+				zf_push(0);
+
+			}
 			break;
 	}
 
@@ -189,18 +238,16 @@ int main(int argc, char* argv[]) {
 	IWDG_SetReload(1000);
 	IWDG_ReloadCounter();
 	IWDG_Enable(); // TODO enable on release
-	Log_Message_FAST("Watchdog ok");
+	Log_Message("Watchdog ok");
 #else
-	Log_Message_FAST("Watchdog disabled");
+	Log_Message("Watchdog disabled");
 #endif
 
 	int btn_state = 0;
 	LED_Init();
-	Log_Message_FAST("Led ok");
-	RELAY_Init();
-	Log_Message_FAST("Relay ok");
+	Log_Message("Led ok");
 	BTN_Init();
-	Log_Message_FAST("Btn ok");
+	Log_Message("Btn ok");
 
 	LED_On();
 	sleepMs(500);
@@ -224,19 +271,29 @@ int main(int argc, char* argv[]) {
 
 	RenderTimer_Init();
 
-	WIFI_Init();
+	MY_USART_Init();
+
+	while ( wifi_init_ok == 0) {
+		if ( WIFI_Init() !=0 ) {
+			Log_Message_FAST("Wifi init error retrying ");
+			continue;
+		}
+		wifi_init_ok = 1;
+	}
+
 	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
-		Log_Message("Server start ok");
+		Log_Message_FAST("Server start ok");
 	}else{
 		Log_Message("Failed to start server");
 	}
 
-
+	RELAY_Init();
+	Log_Message_FAST("Relay ok");
 
 	while (1) {
-#ifdef WATCHDOG_ENABLED
+		#ifdef WATCHDOG_ENABLED
 		IWDG_ReloadCounter();
-#endif
+		#endif
 		uint8_t btn_pressed = 0;
 
 		if( GPIO_ReadInputDataBit(GPIOA, GPIO_Pin_7) ){
@@ -278,7 +335,6 @@ int main(int argc, char* argv[]) {
 		Display_Btn_Pressed(btn_pressed);
 		sleepMs(100);
     }
-
 }
 
 #pragma GCC diagnostic pop

@@ -30,7 +30,7 @@
  * type. This adds a few hundred bytes of .text. Check the memaccess.zf file for
  * examples how to use these operations */
 
-#define ZF_ENABLE_TYPED_MEM_ACCESS 0
+#define ZF_ENABLE_TYPED_MEM_ACCESS 1
 
 
 /* Type to use for the basic cell, data stack and return stack. Choose a signed

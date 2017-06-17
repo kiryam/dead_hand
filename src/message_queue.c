@@ -19,9 +19,8 @@ void ipd_queue_add(message_data* packet){
 	}
 
 	if (message_data_queue[*write_cursor] != NULL) {
-		Log_Message("Data buffer overflow");
+		Log_Message_FAST("Data buffer overflow");
 		free_c(message_data_queue[*write_cursor]);
-		message_data_queue[*write_cursor] = NULL;
 	}
 
 	message_data_queue[*write_cursor] = packet;
@@ -38,8 +37,8 @@ message_data* ipd_queue_get_by_conn_id(unsigned int conn_id) {
 	message_data *packet = message_data_queue[*read_cursor];
 	if (packet != NULL){
 		message_data_queue[*read_cursor] = NULL;
-		*read_cursor = *read_cursor+1;
 	}
+	*read_cursor=*read_cursor+1;
 
 	return packet;
 }
@@ -55,3 +54,39 @@ message_data*  ipd_queue_get(){
 
 	return NULL;
 }
+
+#define NEWLINE_BUFFER_SIZE 32
+struct newline_queue {
+	int tail;
+	int front;
+	char* queue[NEWLINE_BUFFER_SIZE];
+} newline_queue;
+
+void newline_queue_init(){
+	memset(&newline_queue, 0, sizeof(newline_queue));
+}
+
+void newline_queue_add(char* line) {
+	if (newline_queue.tail >= NEWLINE_BUFFER_SIZE ) {
+		newline_queue.tail = 0;
+	}
+
+	if (newline_queue.queue[newline_queue.tail] != NULL ) {
+		Log_Message("Newline buffer overflow");
+		free_c(newline_queue.queue[newline_queue.tail]);
+	}
+
+	newline_queue.queue[newline_queue.tail++] = line;
+}
+
+char* newline_queue_get() {
+	if (newline_queue.front >= NEWLINE_BUFFER_SIZE ) {
+		newline_queue.front = 0;
+	}
+	char* out = newline_queue.queue[newline_queue.front];
+	if( out != NULL ){
+		newline_queue.queue[newline_queue.front++] = NULL;
+	}
+	return out;
+}
+

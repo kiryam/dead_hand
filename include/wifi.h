@@ -21,6 +21,7 @@ extern "C" {
 #define MAC_MAX_LEN 41
 
 
+extern int wifi_init_ok;
 typedef struct {
 	char name[WIFI_POINT_MAX_LEN];
 } WIFI_Point;
@@ -30,13 +31,14 @@ typedef struct {
 	WIFI_Point* points[MAX_POINTS_COUNT];
 } WIFI_List_Result;
 
-void WIFI_Init();
+void MY_USART_Init();
+int WIFI_Init();
 int WIFI_Test();
 int WIFI_Connect(char* wifi_name, char* wifi_pass);
 int WIFI_Retreive_List();
 int WIFI_Get_Status();
 int WIFI_Disconnect();
-int WIFI_TCP_Connect(char* host, int port);
+int WIFI_TCP_Connect(char* host, unsigned int port);
 int WIFI_TCP_Disconnect(uint8_t conn_id);
 int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count);
 int WIFI_TCP_Recv(uint8_t* response);
@@ -47,8 +49,10 @@ int WIFI_Set_CWMODE(int mode);
 int WIFI_Set_CIPMUX(int mode);
 int WIFI_Set_CIPSERVER(int mode, int port);
 int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn);
-int WIFI_Read_Line_Sync(char* answer,uint8_t maxlen, int timeout);
 int WIFI_Read_Byte(uint16_t* ch, int timeout);
+int WIFI_Exec_Cmd_Get_Answer(char* cmd, char* answer);
+int WIFI_Read_Line(char* answer,size_t maxlen, int unsigned timeout_ms);
+void WIFI_Send_Bytes(uint8_t* bytes, unsigned int bytes_count, unsigned int timeout_ms);
 extern int is_new_line;
 
 int add_newline_callback(callback f);
