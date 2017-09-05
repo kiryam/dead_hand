@@ -3,65 +3,50 @@
 #include "common.h"
 #include "ipd_parser.h"
 #include <string.h>
+#include "log.h"
 
-static message_command* message_queue_front = NULL;
-static message_command* message_queue_rear = NULL;
-static int message_queue_count = 0;
+static message_data* message_data_queue[MAX_PENDING_CONNETION*MAX_PENDING_DATA] = {0};
+static unsigned int message_data_cursors[MAX_PENDING_CONNETION*2] = {0};
 
+// TODO CONN_ID
+// message_data_cursors[conn_id << 0] // read_cursor
+// message_data_cursors[conn_id << 1] // write_cursor
+void ipd_queue_add(message_data* packet){
+	unsigned int* write_cursor = &message_data_cursors[(packet->conn_id<<1)+1];
 
-static ipd_parser* message_data_queue[MAX_PENDING_CONNETION*2] = {0};
-static unsigned int message_data_cursors[MAX_PENDING_CONNETION] = {0};
-
-int message_data_queue_add(ipd_parser* parser){
-	int conn_id = parser->conn_id;
-	if ( conn_id >= MAX_PENDING_CONNETION ) {
-		Log_Message("Maximum pending connections");
-		return 1;
-	}
-	if (message_data_cursors[conn_id] >= MAX_PENDING_DATA){
-		Log_Message("Data message queue overloaded");
-		return 1;
+	if (*write_cursor >= MAX_PENDING_DATA) {
+		*write_cursor = 0;
 	}
 
-	parser->next = NULL;
-
-	if( message_data_queue[conn_id<<1] == NULL) {
-		message_data_queue[conn_id<<1] = message_data_queue[(conn_id<<1)+1] = parser;
-	} else {
-		message_data_queue[(conn_id<<1)+1]->next = parser;
-		message_data_queue[(conn_id<<1)+1] = parser;
+	if (message_data_queue[*write_cursor] != NULL) {
+		Log_Message_FAST("Data buffer overflow");
+		free_c(message_data_queue[*write_cursor]);
 	}
 
-	message_data_cursors[conn_id]++;
-
-	return 0;
+	message_data_queue[*write_cursor] = packet;
+	*write_cursor=*write_cursor+1;
 }
 
-ipd_parser* message_data_queue_get_by_conn_id(unsigned int conn_id){
-	if ( conn_id >= MAX_PENDING_CONNETION ) {
-		Log_Message("Conn_id to big");
-		return NULL;
+message_data* ipd_queue_get_by_conn_id(unsigned int conn_id) {
+	unsigned int* read_cursor = &message_data_cursors[(conn_id<<1)+0];
+
+	if (*read_cursor >= MAX_PENDING_DATA){
+		*read_cursor = 0;
 	}
 
-	if (message_data_cursors[conn_id] == 0){
-		return NULL;
+	message_data *packet = message_data_queue[*read_cursor];
+	if (packet != NULL){
+		message_data_queue[*read_cursor] = NULL;
 	}
+	*read_cursor=*read_cursor+1;
 
-	message_data_cursors[conn_id]--;
-	ipd_parser* msg = message_data_queue[conn_id<<1]; // get from front
-	message_data_queue[conn_id<<1] = msg->next; // front set to next
-
-	//if (message_data_cursors[conn_id] == 0) {
-	//	message_data_queue[(conn_id<<1)+1] = NULL;
-	//}
-
-	return msg;
+	return packet;
 }
 
-ipd_parser*  message_data_queue_get(){
-	ipd_parser* ret = NULL;
+message_data*  ipd_queue_get(){
+	message_data* ret = NULL;
 	for(int i=0;i<MAX_PENDING_CONNETION; i++){
-		ret = message_data_queue_get_by_conn_id(i);
+		ret = ipd_queue_get_by_conn_id(i);
 		if (ret != NULL){
 			return ret;
 		}
@@ -70,41 +55,47 @@ ipd_parser*  message_data_queue_get(){
 	return NULL;
 }
 
+#define NEWLINE_BUFFER_SIZE 32
+struct newline_queue {
+	int tail;
+	int front;
+	char* queue[NEWLINE_BUFFER_SIZE];
+} newline_queue;
 
-message_command* message_queue_add(char* buff){
-	if(message_queue_count+1 > MAX_PENDING_MESSAGES){
-		Log_Message("Message queue overloaded");
-		return NULL; // TODO QUEUE overloaded notify
-	}
-
-	message_queue_count++;
-	message_command* msg = (message_command*)malloc_c(sizeof(message_command));
-	if (msg == NULL){
-		Log_Message("Out of memory");
-		return NULL;
-	}
-	//memset(msg, 0, sizeof(message_command));
-	strncpy(msg->line, buff, MESSAGE_COMMAND_SIZE);
-	msg->next = NULL;
-
-	if( message_queue_front == NULL){
-		message_queue_front = message_queue_rear = msg;
-	} else {
-		message_queue_rear->next = msg;
-		message_queue_rear = msg;
-	}
-
-	return msg;
+void newline_queue_init(){
+	memset(&newline_queue, 0, sizeof(newline_queue));
 }
 
-message_command* message_queue_get(){
-	if( message_queue_front == NULL ){
-		return NULL;
+void newline_queue_add(char* line) {
+	if (newline_queue.tail >= NEWLINE_BUFFER_SIZE ) {
+		newline_queue.tail = 0;
 	}
 
-	message_queue_count--;
-	message_command* msg = message_queue_front;
-	message_queue_front = msg->next;
+	if (newline_queue.queue[newline_queue.tail] != NULL ) {
+		Log_Message("Newline buffer overflow");
+		free_c(newline_queue.queue[newline_queue.tail]);
+	}
 
-	return msg;
+	newline_queue.queue[newline_queue.tail++] = line;
+}
+
+char* newline_queue_get() {
+	if (newline_queue.front >= NEWLINE_BUFFER_SIZE ) {
+		newline_queue.front = 0;
+	}
+	char* out = newline_queue.queue[newline_queue.front];
+	if( out != NULL ){
+		newline_queue.queue[newline_queue.front++] = NULL;
+	}
+	return out;
+}
+
+void newline_queue_empty(){
+	for(int i=0; i<NEWLINE_BUFFER_SIZE;i++ ){
+		if(newline_queue.queue[i] != NULL){
+			free_c(newline_queue.queue[i]);
+			newline_queue.queue[i] = NULL;
+		}
+	}
+	newline_queue.front = newline_queue.tail = 0;
 }

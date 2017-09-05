@@ -1,0 +1,49 @@
+<h1>Forth Interpreter</h1>
+
+<style type="text/css" media="screen">
+    #editor { 
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+    }
+</style>
+
+<div style="margin:10px; position: relative;height:400px">
+	<div id="editor">1 1 + 5 * .</div>
+</div>
+<div>
+<button class="btn btn-success" onclick="execute();">Execute</button>
+</div>
+
+    
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ace/1.2.6/ace.js" type="text/javascript" charset="utf-8"></script>
+<script>
+    var editor = ace.edit("editor");
+    editor.setTheme("ace/theme/monokai");
+    editor.getSession().setMode("ace/mode/forth");
+    editor.getSession().setNewLineMode("unix")
+    
+    editor.commands.addCommand({
+	    name: 'execute',
+	    bindKey: {win: 'Enter',  mac: 'Enter'},
+	    exec: function(editor) {
+	    	var row = editor.session.getLength() - 1
+			var column = editor.session.getLine(row).length // or simply Infinity
+			editor.gotoLine(row + 1, column)
+			
+			var currline = editor.getSelectionRange().start.row;
+			var wholelinetxt = editor.session.getLine(currline);	
+				    	
+	        jQuery.post("/forth", {code: wholelinetxt}).success(function(data){
+	        	editor.session.insert({ row: editor.session.getLength(), column: 0}, "\n"+ data +"\n");
+	        	
+	        	var row = editor.session.getLength() - 1
+				var column = editor.session.getLine(row).length // or simply Infinity
+				editor.gotoLine(row + 1, column)
+	        })
+	    },
+	    readOnly: false
+	});
+</script>

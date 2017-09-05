@@ -27,6 +27,6 @@
     
     
     function execute(){
-    	jQuery.post("/tcl?rnd="+new Date().getTime(), {code: editor.getValue()}).success(function(){console.log("OK")})
+    	jQuery.post("/tcl", {code: editor.getValue(), foo: "baz"}).success(function(){console.log("OK")})
     }
 </script>

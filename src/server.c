@@ -5,8 +5,7 @@
 #include "message_queue.h"
 #include "ipd_parser.h"
 #include "handlers.h"
-
-
+#include "log.h"
 #include "wifi.h"
 
 int server_status = -1;
@@ -20,28 +19,6 @@ static int pending_disconnection[MAX_PENDING_DISCONNECTION];
 static int pending_disconnection_last_item = -1;
 
 int open_connections[20] = {0};
-
-typedef struct {
-	int connect_id;
-	char data[MAX_DATA_SIZE];
-} Data_Item;
-
-static Data_Item* pending_data[MAX_PENDING_DATA];
-static int pending_data_last_item = -1;
-
-int pending_data_push(Data_Item* item){
-	if( pending_data_last_item+1 > MAX_PENDING_DATA) {
-		Log_Message("Connection stack overflow");
-		return 1;
-	}
-
-	pending_data[++pending_data_last_item] = item;
-	return 0;
-}
-
-Data_Item* pending_data_pop() {
-	return pending_data_last_item < 0 ? NULL : pending_data[pending_data_last_item--];
-}
 
 int pending_connection_push(int conn_id){
 	if( pending_connection_last_item+1 > MAX_PENDING_CONNETION) {
@@ -74,7 +51,6 @@ int pending_disconnection_pop() {
 void func_wifi_server_on_connect(int conn_id){
 	clients_count++;
 	open_connections[conn_id] = 1;
-	Log_Message("Connected");
 	return;
 }
 
@@ -82,16 +58,11 @@ void WIFI_Server_Timer_Init() {
 	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM7, ENABLE);
 	TIM_TimeBaseInitTypeDef base_timer;
 	TIM_TimeBaseStructInit(&base_timer);
-
-	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 100;
-
+	base_timer.TIM_Prescaler = 24000 - 1;;
+	base_timer.TIM_Period = 300;
 	TIM_TimeBaseInit(TIM7, &base_timer);
-
 	TIM_ITConfig(TIM7, TIM_IT_Update, ENABLE);
 	TIM_Cmd(TIM7, ENABLE);
-	NVIC_EnableIRQ(TIM7_IRQn);
-	NVIC_SetPriority(TIM7_IRQn, 60);
 }
 
 void TIM7_IRQHandler() {
@@ -111,27 +82,35 @@ void TIM7_IRQHandler() {
 			return;
 		}
 
-		ipd_parser* message = (ipd_parser*)message_data_queue_get();
-
-		if( message != NULL ){
-			int conn_id = message->conn_id;
+		message_data* ipd_raw_message = ipd_queue_get();
+		if (ipd_raw_message != NULL){
+			unsigned int conn_id = ipd_raw_message->conn_id;
 			Request request = {0};
 
-			if( request_parse(&request, message->message, message->message_size) != 0){
+			if( request_parse(&request, ipd_raw_message->message, ipd_raw_message->message_length) != 0){
 				Log_Message("Parse header error");
-				ipd_parser_free(message);
+				free_c(ipd_raw_message->message);
+				free_c(ipd_raw_message);
 				return;
 			}
 
-			ipd_parser_free(message);
+			if (request.content_length != 0) {
+				message_data* payload_raw_message = (message_data*)ipd_queue_get_by_conn_id(conn_id);
+				if( payload_raw_message != NULL ) {
+					request_parse_payload(&request, payload_raw_message->message);
+					free_c(payload_raw_message->message);
+					free_c(payload_raw_message);
+				}
+			}
 
-			Log_Message("OK");
+			free_c(ipd_raw_message->message);
+			free_c(ipd_raw_message);
 
-			char response[RESPONSE_MAX_LEN+512] = {0};
+			uint8_t response[RESPONSE_MAX_LEN+512] = {0};
 			int bytes_pending = handle_request(&request, response);
 			request_free(&request);
 
-			char* response_ptr = response;
+			uint8_t* response_ptr = response;
 
 			char tmp_log[128] = {0};
 
@@ -143,7 +122,7 @@ void TIM7_IRQHandler() {
 					}
 
 					sprintf(tmp_log, "Sent %d bytes  (pending: %d)", MAX_PACKET_LEN, bytes_pending);
-					Log_Message(tmp_log);
+					Log_Message_FAST(tmp_log);
 
 					response_ptr = &response_ptr[MAX_PACKET_LEN];
 					bytes_pending -= MAX_PACKET_LEN;
@@ -152,38 +131,20 @@ void TIM7_IRQHandler() {
 						Log_Message("Send data failed");
 					}
 					sprintf(tmp_log, "Sent %d bytes", bytes_pending);
-					Log_Message(tmp_log);
+					Log_Message_FAST(tmp_log);
 
 					bytes_pending=0;
 				}
-				sleepMs(2000);
+				int n = 1920000;
+				while(n--);
 			}
-			Log_Message("Send done");
+			Log_Message_FAST("Send done");
 		}
     }
 }
 
-void func_wifi_on_new_line(char* line){
-	if (strncmp(&line[2], "CONNECT", 7) == 0) {
-		pending_connection_push(atoi(&line[0]));
-	} else if( strncmp(&line[3], "CONNECT", 7) == 0) {
-		char ch[3]={0};
-		strncpy(ch, line, 2);
-		pending_connection_push(atoi(ch));
-	} else if (strncmp(&line[2], "CLOSED", 6) == 0) {
-		pending_disconnection_push(atoi(&line[0]));
-	} else if(strncmp(&line[3], "CLOSED", 6) == 0 ){
-		char ch[3]={0};
-		strncpy(ch, line, 2);
-		pending_disconnection_push(atoi(ch));
-	}
-}
-
-
 int WIFI_Server_Start(int port){
 	WIFI_Server_Timer_Init();
-	remove_newline_callback((callback)func_wifi_on_new_line);
-	add_newline_callback((callback)func_wifi_on_new_line);
 
 	if ( WIFI_Set_CIPSERVER(0, 0) ){
 		Log_Message("CIPSERVER=0 ERROR");

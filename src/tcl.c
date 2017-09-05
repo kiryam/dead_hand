@@ -2,11 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-#if 0
 #define DBG printf
-#else
-#define DBG(...)
-#endif
 
 static int tcl_is_special(char c, int q) {
   return (c == '$' || (!q && (c == '{' || c == '}' || c == ';' || c == '\r' ||
@@ -113,7 +109,7 @@ void tcl_free(tcl_value_t *v) { free_c(v); }
 
 tcl_value_t *tcl_append_string(tcl_value_t *v, const char *s, size_t len) {
   size_t n = tcl_length(v);
-  v = realloc(v, n + len + 1);
+  v = realloc_c(v, n + len + 1);
   memset((char *)tcl_string(v) + n, 0, len + 1);
   strncpy((char *)tcl_string(v) + n, s, len);
   return v;
@@ -145,7 +141,7 @@ int tcl_list_length(tcl_value_t *v) {
   return count;
 }
 
-void tcl_list_free(tcl_value_t *v) { free(v); }
+void tcl_list_free(tcl_value_t *v) { free_c(v); }
 
 tcl_value_t *tcl_list_at(tcl_value_t *v, int index) {
   int i = 0;
@@ -238,9 +234,9 @@ static struct tcl_env *tcl_env_free(struct tcl_env *env) {
     env->vars = env->vars->next;
     tcl_free(var->name);
     tcl_free(var->value);
-    free(var);
+    free_c(var);
   }
-  free(env);
+  free_c(env);
   return parent;
 }
 
@@ -579,8 +575,8 @@ void tcl_destroy(struct tcl *tcl) {
     struct tcl_cmd *cmd = tcl->cmds;
     tcl->cmds = tcl->cmds->next;
     tcl_free(cmd->name);
-    free(cmd->arg);
-    free(cmd);
+    free_c(cmd->arg);
+    free_c(cmd);
   }
   tcl_free(tcl->result);
 }

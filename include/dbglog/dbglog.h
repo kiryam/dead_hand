@@ -53,8 +53,14 @@
 #  define DBGLOG_LEVEL 0
 #endif
 
+#ifdef TRACE
+	#ifndef DBGLOG_FUNCTION
+	#  define DBGLOG_FUNCTION trace_printf
+	#endif
+#else
 #ifndef DBGLOG_FUNCTION
-#  define DBGLOG_FUNCTION trace_printf
+	#  define DBGLOG_FUNCTION printf
+	#endif
 #endif
 
 /* ------------------------------------------------------------------------- */

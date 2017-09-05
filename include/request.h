@@ -11,8 +11,8 @@ extern "C" {
 #define REQUEST_MAX_PATH_LEN 128
 #define REQUEST_MAX_PROTO_LEN 16
 
-#define REQUEST_MAX_HEADER_KEY 1024
-#define REQUEST_MAX_HEADER_VALUE 1024
+#define REQUEST_MAX_HEADER_KEY 128
+#define REQUEST_MAX_HEADER_VALUE 128
 #define REQUEST_MAX_HEADER_RAW_KV (REQUEST_MAX_HEADER_KEY+REQUEST_MAX_HEADER_VALUE+1)
 #define REQUEST_MAX_HEADER_COUNT 128
 
@@ -48,6 +48,8 @@ typedef struct {
 	int data_count;
 	char path[REQUEST_MAX_PATH_LEN];
 	char proto[REQUEST_MAX_PROTO_LEN];
+	unsigned int content_length;
+
 	Request_Header* headers[REQUEST_MAX_HEADER_COUNT];
 	Request_Data * data[REQUEST_MAX_DATA_COUNT];
 
@@ -56,6 +58,9 @@ typedef struct {
 
 int request_parse(Request* request, char* data, unsigned int length);
 void request_free(Request* request);
+void urldecode2(char *dst, const char *src);
+
+void request_parse_payload(Request* request, char* data);
 
 #ifdef __cplusplus
 }

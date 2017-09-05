@@ -55,7 +55,6 @@ extern char umm_heap_pool[];
 
 /* Start addresses and the size of the heap */
 #define UMM_MALLOC_CFG_HEAP_ADDR (umm_heap_pool)
-#define UMM_MALLOC_CFG_HEAP_SIZE 0x10000
 
 /* A couple of macros to make packing structures less compiler dependent */
 

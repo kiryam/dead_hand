@@ -16,6 +16,7 @@ typedef struct {
 } Log_Entry;
 
 void Log_Message(char* str);
+void Log_Message_FAST(char* str);
 void Log_Get_Messages(Log_Entry* target_list, int limit);
 
 void Log_Init();

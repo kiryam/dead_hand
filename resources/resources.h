@@ -7,10 +7,12 @@ extern "C" {
 extern const char static_style[];
 extern const char static_javascript[];
 extern const char static_template_page[];
+extern const char static_forth_bootstrap[];
 
 extern const char static_page_connect[];
 extern const char static_page_manage[];
 extern const char static_page_tcl[];
+extern const char static_page_forth[];
 
 
 #ifdef __cplusplus

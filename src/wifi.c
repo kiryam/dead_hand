@@ -4,24 +4,33 @@
 #include "message_queue.h"
 #include "server.h"
 #include "ipd_parser.h"
+#include "usart_fifo.h"
+#include "common.h"
 
 //#define LOG_ESP_MESSAGES
+
+#define DMA_BUFF_SIZE 128
+uint8_t dma_buff[DMA_BUFF_SIZE] = {0};
 
 int wifi_init_ok = 0;
 static char wifi_buff[MESSAGE_COMMAND_SIZE] = {0};
 static int wifi_buff_pos=0;
+
+int is_send_ok=0;
 int is_new_line=0;
 int is_welcome_byte=0;
 
-static callback new_line_handlers[MAX_NEWLINE_CALLBACK_COUNT] = {0};
+static int16_t status;
+static uint8_t byte;
+static uint8_t rx_last_error;
 
 static int recv_message_data_started=0;
 #define RECV_MESSAGE_CONN_ID_LEN 4
 #define RECV_MESSAGE_SIZE_TMP_LEN 8
 
-static ipd_parser* parser;
+static ipd_parser parser;
 
-#define PROTOCOL_LOG_MAX_LENGTH 1024*1
+#define PROTOCOL_LOG_MAX_LENGTH 1024*4
 
 //#define PROTO_LOG
 
@@ -30,9 +39,8 @@ char protocol_log[PROTOCOL_LOG_MAX_LENGTH] = {0};
 static int protocol_cursor=0;
 enum PROTOCOL_LOG_DIR {DIR_IN, DIR_OUT};
 void protocol_log_byte(uint16_t byte, uint8_t dir){
-	if( protocol_cursor >= (PROTOCOL_LOG_MAX_LENGTH-10) ){
+	if( protocol_cursor >= PROTOCOL_LOG_MAX_LENGTH ){
 		protocol_cursor=0;
-		protocol_log[0] = '\0';
 	}
 	protocol_log[protocol_cursor++] = byte;
 }
@@ -42,108 +50,131 @@ char* get_protocol_log(){
 }
 #endif
 
-int add_newline_callback(callback f){
-	for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
-		if (new_line_handlers[i] == NULL){
-			new_line_handlers[i] = f;
+int wait_send_ok(unsigned int ms){
+	return timeout_ms(ms, &is_send_ok);
+}
+
+int wait_welcome_byte(unsigned int ms){
+	return timeout_ms(ms, &is_welcome_byte);
+}
+
+int wait_new_line(unsigned int ms){
+	return timeout_ms(ms, &is_new_line);
+}
+
+#define MAX_WAIT_COMMANDS 3
+int WIFI_Wait_Answer(const char* cmd, unsigned int timeout_ms) {
+
+	char cmds[MESSAGE_COMMAND_SIZE*MAX_WAIT_COMMANDS] = {0};
+	uint8_t commands_count = 0;
+	uint8_t wait_lines = 10;
+
+	const char deim[2] = "|";
+	char *token = strtok (cmd, deim);
+	while (token != NULL) {
+		if( commands_count >= MAX_WAIT_COMMANDS ){
+			Log_Message("Max command count passed");
+			return 1;
+		}
+	    strncpy(&cmds[MESSAGE_COMMAND_SIZE * commands_count], token, MESSAGE_COMMAND_SIZE);
+	    token = strtok (NULL, deim);
+	}
+	Log_Message(cmds);
+
+	while(wait_lines--){
+		char answer[MESSAGE_COMMAND_SIZE] = {0};
+		if (WIFI_Read_Line(answer, MESSAGE_COMMAND_SIZE, timeout_ms) != 0){
+			return 1;
+		}
+		if (strncmp(cmd, answer, MESSAGE_COMMAND_SIZE) == 0 ){
 			return 0;
 		}
 	}
 
-	Log_Message("Failed to add newline callback");
 	return 1;
-}
-
-int remove_newline_callback(callback f){
-	for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
-		if (new_line_handlers[i] == f){
-			new_line_handlers[i] = NULL;
-			return 0;
-		}
-	}
-
-	Log_Message("Failed to remove newline callback");
-	return 1;
-}
-
-int wait_welcome_byte(int timeout){
-	while ( timeout > 0){
-		if (is_welcome_byte ){
-			return 0;
-		}
-		timeout--;
-	}
-	return is_welcome_byte ? 0 : 1;
-}
-
-int wait_new_line(int timeout){
-	while ( timeout > 0){
-		if (is_new_line ){
-			return 0;
-		}
-		timeout--;
-	}
-	return is_new_line ? 0 : 1;
-}
-
-void TIM6_DAC_IRQHandler() {
-	if (TIM_GetITStatus(TIM6, TIM_IT_Update) != RESET) {
-		TIM_ClearITPendingBit(TIM6, TIM_IT_Update);
-		message_command* msg = message_queue_get();
-		if( msg != NULL ){
-#ifdef LOG_ESP_MESSAGES
-			Log_Message(msg->line);
-#endif
-
-			if( msg->line[0] != '\0' ){
-				for(int i=0; i<MAX_NEWLINE_CALLBACK_COUNT; i++){
-					if (new_line_handlers[i] != NULL){
-						new_line_handlers[i](&msg->line);
-					}
-				}
-			}
-			free_c(msg);
-		}
-  }
 }
 
 void USART1_IRQHandler(void) {
 	if(USART_GetITStatus(USART1, USART_IT_RXNE) == SET) {
 		USART_ClearITPendingBit(USART1, USART_IT_RXNE);
+		status = USART1->SR;
+		byte = USART1->DR;
+		rx_last_error = 0;
 
-		char byte = USART_ReceiveData(USART1);
+		if (status & USART_SR_FE) {
+			rx_last_error |= USART_FIFO_ERROR_FRAME;
+		}
 
-		if( recv_message_data_started == 1){
-			ipd_parser_execute(parser, byte);
+		if (status & USART_SR_ORE) {
+			rx_last_error |= USART_FIFO_ERROR_OVERRUN;
+		}
 
-			if ( parser->errno != OK ){
-				ipd_parser_free(parser);
-				Log_Message("IPDparse error ");
-				recv_message_data_started = 0;
-				wifi_buff_pos = 0;
-				return;
-			} else if ( parser->state == s_message_done ){
-				if ( message_data_queue_add(parser) != 0 ) {
-					ipd_parser_free(parser);
+		if (status & USART_SR_NE) {
+			rx_last_error |= USART_FIFO_ERROR_NOISE;
+		}
+
+		if ( rx_last_error & USART_FIFO_ERROR_FRAME){
+			Log_Message_FAST("USART_FIFO_ERROR_FRAME");
+		} else if (rx_last_error & USART_FIFO_ERROR_OVERRUN){
+			Log_Message("USART_FIFO_ERROR_OVERRUN");
+		} else if(rx_last_error & USART_FIFO_ERROR_NOISE){
+			Log_Message_FAST("USART_FIFO_ERROR_NOISE");
+		} else if(rx_last_error & USART_FIFO_ERROR_BUFFER_OVERFLOW){
+			Log_Message("USART_FIFO_ERROR_BUFFER_OVERFLOW");
+		} else if(rx_last_error & USART_FIFO_NO_DATA){
+			Log_Message("USART_FIFO_NO_DATA");
+		} else if(rx_last_error != 0) {
+			Log_Message("Unknown FIFO error");
+		}
+
+		#ifdef PROTO_LOG
+			protocol_log_byte(byte, DIR_IN);
+		#endif
+		if( recv_message_data_started == 1) {
+			wifi_buff_pos=0;
+			ipd_parser_execute(&parser, byte);
+
+			if ( parser.errno != OK ){
+				if (parser.packet->message != NULL){
+					free_c(parser.packet->message);
 				}
+				free_c(parser.packet);
+				ipd_parser_free(&parser);
+				if( parser.errno == MESSAGE_SIZE_READ_ERROR ){
+					Log_Message("MESSAGE_SIZE_READ_ERROR");
+				}else if (parser.errno == MESSAGE_TOO_LONG) {
+					Log_Message("MESSAGE_TOO_LONG");
+				}else if (parser.errno == OUT_OF_MEMORY) {
+					Log_Message("OUT_OF_MEMORY");
+				}else if (parser.errno == CONNID_READ_ERROR) {
+					Log_Message("CONNID_READ_ERROR");
+				}else{
+					Log_Message("IPDparse error");
+				}
+				#ifdef PROTO_LOG
+				Log_Message(get_protocol_log());
+				#endif
 				recv_message_data_started = 0;
-				wifi_buff_pos = 0;
+				wifi_buff[0] = '\0';
+				return;
+			} else if ( parser.state == s_message_done ){
+				char ch[64] = {0};
+				sprintf(ch, "Readed %d bytes", parser.message_bytes_readed);
+				Log_Message_FAST(ch);
+				ipd_queue_add(parser.packet);
+				ipd_parser_free(&parser);
+				wifi_buff[0] = '\0';
+				recv_message_data_started = 0;
 				return;
 			}
-			//Log_Message("a");
 
 			return;
-
-			//done:
-
-			//	return;
 		}
 
 		if ( wifi_buff_pos >= MESSAGE_COMMAND_SIZE ){
 			wifi_buff_pos = 0;
 			Log_Message("Maximum buff length exited");
 		}
-
 
 		if( wifi_buff_pos == 0 && byte == '>' ){
 			is_welcome_byte = 1;
@@ -152,32 +183,58 @@ void USART1_IRQHandler(void) {
 
 		wifi_buff[wifi_buff_pos++] = byte;
 
-		if( byte == '\n' ){
-			is_new_line = 1;
+		if( byte == '\n' ) {
 			wifi_buff[wifi_buff_pos] = '\0';
-			message_queue_add(wifi_buff);
-			wifi_buff_pos=0;
 
+			if (fast_compare(wifi_buff, "WIFI GOT IP\r\n", 13) == 0){
+				Log_Message_FAST("WIFI GOT IP");
+			} else if(fast_compare(wifi_buff, "WIFI CONNECTED\r\n", 16) == 0){
+				Log_Message_FAST("WIFI CONNECTED");
+			} else if(fast_compare(wifi_buff, "DISCO", 5) == 0){
+				Log_Message("WIFI DISCO"); // TODO
+				Log_Message(wifi_buff);
+			} else if (fast_compare(&wifi_buff[2], "CONNECT", 7) == 0) {
+				Log_Message_FAST("CONNECT");
+			} else if (fast_compare(&wifi_buff[2], "CLOSED", 6) == 0) {
+				Log_Message_FAST("CLOSED");
+			} else if (fast_compare(wifi_buff, "SEND OK", 7) == 0) {
+				is_send_ok = 1;
+				Log_Message_FAST("SEND OK");
+			} else {
+				is_new_line = 1;
+				char* newline = malloc_c(wifi_buff_pos);
+				if (newline != NULL){
+					memcpy(newline, wifi_buff, wifi_buff_pos+1);
+					newline_queue_add(newline);
+				}
+			}
+
+			wifi_buff_pos=0;
 			return;
 		}
 
-		if( strncmp(wifi_buff, "+IPD,", 5) == 0 ){
+		if( wifi_buff_pos == 5 && strncmp("+IPD,", wifi_buff, 5) == 0 ){
+			Log_Message_FAST("IPD Parse started");
 			recv_message_data_started = 1;
-			parser = malloc_c(sizeof(ipd_parser));
-			if (parser == NULL){
+
+			message_data* packet = (message_data*)malloc_c(sizeof(message_data));
+			if (packet == NULL){
 				Log_Message("Out of memory");
 				return;
 			}
-			ipd_parser_init(parser);
-		}
 
-#ifdef PROTO_LOG
-		protocol_log_byte(byte, DIR_IN);
-#endif
+			packet->conn_id = 0;
+			packet->message_length = 0;
+			packet->message = NULL;
+
+			ipd_parser_init(&parser, packet);
+		}
 	}
 }
 
 void MY_USART_Init(){
+	newline_queue_init();
+
 	RCC_AHB1PeriphClockCmd(RCC_AHB1Periph_GPIOA, ENABLE);
 	RCC_APB2PeriphClockCmd(RCC_APB2Periph_USART1, ENABLE);
 
@@ -185,7 +242,7 @@ void MY_USART_Init(){
 	gpio_port.GPIO_Pin   = GPIO_Pin_10;
 	gpio_port.GPIO_Mode  = GPIO_Mode_AF;
 	gpio_port.GPIO_Speed = GPIO_Speed_50MHz;
-	gpio_port.GPIO_PuPd = GPIO_PuPd_NOPULL;
+	gpio_port.GPIO_PuPd = GPIO_PuPd_UP;
 	gpio_port.GPIO_OType = GPIO_OType_OD;
 	GPIO_Init(GPIOA, &gpio_port);
 
@@ -196,7 +253,6 @@ void MY_USART_Init(){
 	gpio_port1.GPIO_PuPd = GPIO_PuPd_UP;
 	gpio_port1.GPIO_OType =  GPIO_OType_PP;
 	GPIO_Init(GPIOA, &gpio_port1);
-
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource9, GPIO_AF_USART1);
 	GPIO_PinAFConfig(GPIOA, GPIO_PinSource10, GPIO_AF_USART1);
 
@@ -207,53 +263,33 @@ void MY_USART_Init(){
 	usart.USART_Parity = USART_Parity_No;
 	usart.USART_StopBits = USART_StopBits_1;
 	usart.USART_WordLength = USART_WordLength_8b;
-
 	USART_Init(USART1, &usart);
 	USART_Cmd(USART1, ENABLE);
-
-	NVIC_InitTypeDef NVIC_InitStructure;
-	NVIC_InitStructure.NVIC_IRQChannel = USART1_IRQn;
-	NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0;
-	NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-	NVIC_Init(&NVIC_InitStructure);
-
-	RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM6, ENABLE);
-	TIM_TimeBaseInitTypeDef base_timer;
-	TIM_TimeBaseStructInit(&base_timer);
-
-	base_timer.TIM_Prescaler = 24000 - 1;
-	base_timer.TIM_Period = 10;
-	TIM_TimeBaseInit(TIM6, &base_timer);
-
-	TIM_ITConfig(TIM6, TIM_IT_Update, ENABLE);
-	TIM_Cmd(TIM6, ENABLE);
-
 	USART_ITConfig(USART1, USART_IT_RXNE, ENABLE);
-	NVIC_EnableIRQ(TIM6_DAC_IRQn);
-	NVIC_SetPriority(TIM6_DAC_IRQn, 54);
-
-
+	recv_message_data_started =0;
 }
 
 // TODO REMOVE
 // DEPRECATED
-void WIFI_Send_Command(char* command, uint8_t timeout){
+void WIFI_Send_Command(char* command, unsigned int timeout_ms){
 #ifdef LOG_ESP_MESSAGES
 	Log_Message(command);
 #endif
+	newline_queue_init();
 	// TODO implement timeout
 	for (unsigned int i=0; i<strlen(command); i++){
+		while (USART_GetFlagStatus(USART1, USART_FLAG_TC) == RESET);
 		USART_SendData(USART1, command[i]);
 #ifdef PROTO_LOG
 		protocol_log_byte(command[i], DIR_OUT);
 #endif
-		while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET){}
+		//while(USART_GetFlagStatus(USART1, USART_FLAG_TXE) == RESET){}
 	}
 }
 
-void WIFI_Send_Bytes(uint8_t* bytes, unsigned int bytes_count,  uint8_t timeout){
+void WIFI_Send_Bytes(uint8_t* bytes, unsigned int bytes_count, unsigned int timeout_ms){
 	// TODO implement timeout
+	newline_queue_init();
 	for (unsigned int i=0; i<=bytes_count; i++){
 		USART_SendData(USART1, bytes[i]);
 #ifdef PROTO_LOG
@@ -263,8 +299,20 @@ void WIFI_Send_Bytes(uint8_t* bytes, unsigned int bytes_count,  uint8_t timeout)
 	}
 }
 
-int WIFI_Read_Line(char* answer,size_t maxlen, int timeout){
-	if (wait_new_line(timeout) == 0) {
+
+int WIFI_Read_Line(char* answer,size_t maxlen, int unsigned timeout_ms){
+	char* buff = timeout_ms_value(timeout_ms, newline_queue_get);
+	if ( buff != NULL ) {
+		strncpy(answer, buff, maxlen);
+		is_new_line=0;
+		free_c(buff);
+		return 0;
+	}
+	return 1;
+}
+
+int WIFI_Read_Line2(char* answer,size_t maxlen, int unsigned timeout_ms){
+	if (wait_new_line(timeout_ms) == 0) {
 		strncpy(answer, wifi_buff, maxlen);
 		is_new_line=0;
 		return 0;
@@ -273,37 +321,101 @@ int WIFI_Read_Line(char* answer,size_t maxlen, int timeout){
 }
 
 int WIFI_Exec_Cmd_Get_Answer(char* cmd, char* answer){
+	newline_queue_empty();
+
 	is_new_line=0;
 	WIFI_Send_Command(cmd, 0);
-	if (WIFI_Read_Line(answer, 100, 800000) != 0 ){
+	if (WIFI_Read_Line(answer, 100, 5000) != 0 ){
 		return 1;
 	}
 
-#ifndef ESP_DISABLE_ECHO
-	if (WIFI_Read_Line(answer,100, 8000000) != 0){
+	#ifndef ESP_DISABLE_ECHO
+		if (WIFI_Read_Line(answer,100, 5000) != 0){
+			return 1;
+		}
+	#endif
+
+	if (WIFI_Read_Line(answer,100, 8000) == 1) {
 		return 1;
 	}
-#endif
 
-	return WIFI_Read_Line(answer,100, 800000);
+	if(strncmp(answer, "busy p..", 8 ) == 0){
+		//WIFI_Read_Line(answer,100, 8000);
+		return WIFI_Read_Line(answer,100, 8000);
+	}
+
+	return 0;
 }
 
 int WIFI_Reset(){
 	char answer[100] = {0};
-	WIFI_Exec_Cmd_Get_Answer("AT+RST\r\n", answer);
+	//if (WIFI_Exec_Cmd_Get_Answer("+++\r\n", answer) != 0 ){
+	//	return 1;
+	//}
 
-	return strncmp("OK", answer,2);
+	if (WIFI_Exec_Cmd_Get_Answer("AT+RST\r\n", answer) != 0 ){
+		return 1;
+	}
+
+	int read_lines_max_count=40;
+	while ((read_lines_max_count--)>0){ // skipping debug output, waiting for \r\n
+		if (WIFI_Read_Line(answer, 100, 5000) != 0 ){
+			Log_Message("Reset error 1");
+			return 1;
+		}
+
+
+		if (strncmp(answer, "ready", 5) == 0){
+			return 0;
+		}
+
+		//if (strncmp(answer, "OK", 2) == 0){
+		//	return 0;
+		//}
+
+		/*if ( strncmp(answer, "\r\n", 2) == 0) { // if echo enabled
+			if (WIFI_Read_Line(answer, 100, 1000) != 0 ){
+				return 1;
+			}
+			break;
+		}*/
+	}
+	Log_Message("Reset error 2");
+
+	return 1;
 }
 
 int WIFI_Test(){
 	char answer[100] = {0};
-	if (WIFI_Exec_Cmd_Get_Answer("AT\r\n", answer) != 0) {
-		return 1;
-	}
+	uint retry_est = 100;
 
-	if(strncmp("\r\n", answer, 2) ==0){
-		WIFI_Read_Line(answer,100, 200000);
-	}
+	stage1:
+		is_new_line=0;
+		WIFI_Send_Command("AT\r\n", 0);
+
+		if (WIFI_Exec_Cmd_Get_Answer("AT\r\n", answer) != 0) {
+			return 1;
+		}
+
+		if(strncmp("\r\n", answer, 2) ==0){
+			if (WIFI_Read_Line(answer,100, 5000) != 0 ){
+				return 1;
+			}
+		}
+
+	//if (strncmp(answer, "busy", 4) == 0 || (strncmp(answer, "ERROR", 5) == 0)){
+	//	if (!retry_est--) {
+	//		Log_Message("Max retry count exited. busy");
+	//		return 1;
+	//	}
+	//	sleepMs(200);
+	//	goto stage1;
+	//}
+
+	//if (WIFI_Read_Line(answer,100, 5000) != 0 ){
+	//	return 1;
+	//}
+
 	return strncmp("OK", answer, 2);
 }
 
@@ -312,19 +424,13 @@ int WIFI_Set_CIPMODE(int mode){
 	char command[19]= {0};
 	sprintf(command, "AT+CIPMODE=%d\r\n", mode);
 
-	is_new_line=0;
-	WIFI_Send_Command(command, 0);
-	WIFI_Read_Line(answer,100, 200000);
-
-#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer,100, 200000);
-#endif
-
-	if (strncmp("CIPMUX and CIPSERVER must be 0", answer, 30) == 0){
-		Log_Message("CIPMUX and CIPSERVER must be 0");
+	if (WIFI_Exec_Cmd_Get_Answer(command, answer) != 0 ) {
 		return 1;
 	}
-	WIFI_Read_Line(answer,100, 200000);
+
+	if(strncmp("\r\n", answer, 2) ==0){
+		WIFI_Read_Line(answer,100, 1000);
+	}
 
 	return strncmp(answer, "OK", 2);
 }
@@ -340,7 +446,7 @@ int WIFI_Set_CWMODE(int mode){
 
 
 	if(strncmp(answer, "\r\n", 2) == 0){
-		WIFI_Read_Line(answer,100, 200000);
+		WIFI_Read_Line(answer,100, 100);
 		Log_Message(answer);
 		//return 1;
 	}
@@ -351,7 +457,7 @@ int WIFI_Set_CWMODE(int mode){
 	}
 
 	if(strncmp(answer, "OK", 2) != 0){
-		WIFI_Read_Line(answer,100, 200000);
+		WIFI_Read_Line(answer,100, 100);
 		return 1;
 	}
 
@@ -363,17 +469,20 @@ int WIFI_Set_CIPMUX(int mode){
 	char command[20]= {0};
 	sprintf(command, "AT+CIPMUX=%d\r\n", mode);
 
-	is_new_line=0;
-	WIFI_Send_Command(command, 0);
-	if ( WIFI_Read_Line(answer,100, 400000) != 0 ) {
+	if (WIFI_Exec_Cmd_Get_Answer(command, answer) != 0 ) {
 		return 1;
 	}
 
-#ifndef ESP_DISABLE_ECHO
-	if (WIFI_Read_Line(answer,100, 400000) != 0) {
+	if (strncmp("\r\n", answer, 2) == 0){
+		if (WIFI_Read_Line(answer,100, 1000) != 0 ) {
+			return 1;
+		}
+	}
+
+	if (strncmp("ERROR", answer, 5) == 0){
+		Log_Message("ERROR");
 		return 1;
 	}
-#endif
 
 	if (strncmp("CIPSERVER must be 0", answer, 19) == 0){
 		Log_Message("CIPSERVER must be 0");
@@ -385,9 +494,6 @@ int WIFI_Set_CIPMUX(int mode){
 		return 1;
 	}
 
-	if (WIFI_Read_Line(answer,100, 400000) != 0 ) {
-		return 1;
-	}
 
 	return strncmp(answer, "OK", 2);
 }
@@ -410,7 +516,6 @@ int read_to_quote(char* answer, char* out){
 }
 
 int WIFI_Get_Status(char* ip, char* sta_ip, char* mac, char* sta_mac){
-	char answer[512] ={0};
 	ip[0] = '\0';
 	sta_ip[0] = '\0';
 	mac[0] = '\0';
@@ -419,33 +524,55 @@ int WIFI_Get_Status(char* ip, char* sta_ip, char* mac, char* sta_mac){
 	int lines_estimated = 6;
 
 	WIFI_Send_Command("AT+CIFSR\r\n", 0);
+	char full_answer[1024] = {0};
+	int full_answer_cur = 0;
 
 	while((lines_estimated--) > 0){
-		if (WIFI_Read_Line(answer, 500, 800000) != 0 ){
-			return 1;
-		}
-		Log_Message(answer);
-		if( strncmp("+CIFSR:", answer, 7) == 0){
-			char tmp[IP_MAX_LEN] = {0};
-			if( strncmp(&answer[7], "APIP", 4) == 0 ){
-				read_to_quote(&answer[13], tmp);
-				strncpy(ip, tmp, IP_MAX_LEN);
-			}else if( strncmp(&answer[7], "STAIP", 5) == 0){
-				read_to_quote(&answer[14], tmp);
-				strncpy(sta_ip, tmp, IP_MAX_LEN);
-			}else if(  strncmp(&answer[7], "APMAC", 5) == 0 ){
-				read_to_quote(&answer[14], tmp);
-				strncpy(mac, tmp, MAC_MAX_LEN);
-			}else if( strncmp(&answer[7], "STAMAC", 6) == 0 ){
-				read_to_quote(&answer[15], tmp);
-				strncpy(sta_mac, tmp, MAC_MAX_LEN);
-			}
-		}else{
+		char line[512] ={0};
+		if (WIFI_Read_Line(line, 500, 100) != 0 ){
 			break;
 		}
+		size_t len = strlen(line);
+		strncpy(&full_answer[full_answer_cur], line, len);
+		full_answer_cur +=len;
 	}
 
-	return strncmp(answer, "OK", 2);
+	int answer_analyzed = 0;
+	char line[128] = {0};
+	int line_cur =0;
+	line_reader:
+		line_cur=0;
+		line[0] = '\0';
+		while( answer_analyzed < full_answer_cur) {
+			char c = full_answer[answer_analyzed++];
+			line[line_cur++] = c;
+			if (c =='\n' ){
+				goto analyze_line;
+			}
+		}
+
+	analyze_line:
+		if( strncmp("+CIFSR:", line, 7) == 0){
+			char tmp[IP_MAX_LEN] = {0};
+			if( strncmp(&line[7], "APIP", 4) == 0 ){
+				read_to_quote(&line[13], tmp);
+				strncpy(ip, tmp, IP_MAX_LEN);
+			}else if( strncmp(&line[7], "STAIP", 5) == 0){
+				read_to_quote(&line[14], tmp);
+				strncpy(sta_ip, tmp, IP_MAX_LEN);
+			}else if(  strncmp(&line[7], "APMAC", 5) == 0 ){
+				read_to_quote(&line[14], tmp);
+				strncpy(mac, tmp, MAC_MAX_LEN);
+			}else if( strncmp(&line[7], "STAMAC", 6) == 0 ){
+				read_to_quote(&line[15], tmp);
+				strncpy(sta_mac, tmp, MAC_MAX_LEN);
+			}else{
+				return 0;
+			}
+			goto line_reader;
+	}
+
+	return 0;
 }
 
 int WIFI_Connect(char* wifi_name, char* wifi_pass){
@@ -463,7 +590,7 @@ int WIFI_Connect(char* wifi_name, char* wifi_pass){
 		return 1;
 	}
 
-	if (WIFI_Read_Line(answer, 100, 800000) != 0 ){
+	if (WIFI_Read_Line(answer, 100, 100) != 0 ){
 		return 1;
 	}
 
@@ -471,18 +598,7 @@ int WIFI_Connect(char* wifi_name, char* wifi_pass){
 		return 1;
 	}
 
-	//if (
 	WIFI_Exec_Cmd_Get_Answer(command, answer);
-			//!= 0)
-	//{
-		//return 1;
-	//}
-	/*if ( answer[0]=='O' ) {
-		WIFI_Read_Line(answer,100, 200000);
-		if (strncmp(answer, "OK", 2) != 0){
-			return 1;
-		}
-	}*/
 
 	return 0;
 }
@@ -498,6 +614,14 @@ int WIFI_Power(unsigned int power){
 	char answer[100]={0};
 	char command[20] = {0};
 	sprintf(command, "AT+RFPOWER=%d\r\n", power);
+	WIFI_Exec_Cmd_Get_Answer(command, answer);
+	return strncmp(answer, "OK", 2);
+}
+
+int WIFI_Set_Baud(unsigned int baud){
+	char answer[100]={0};
+	char command[32] = {0};
+	sprintf(command, "AT+UART=%d,8,1,0,0\r\n", baud);
 	WIFI_Exec_Cmd_Get_Answer(command, answer);
 	return strncmp(answer, "OK", 2);
 }
@@ -518,7 +642,7 @@ int WIFI_Set_CWSAP(char* ssid, char* password, uint8_t channel, uint8_t ecn){
 	}
 
 	if(strncmp(answer, "\r\n", 2) == 0){
-		WIFI_Read_Line(answer,100, 200000);
+		WIFI_Read_Line(answer,100, 100);
 		Log_Message(answer);
 		//return 1;
 	}
@@ -561,7 +685,7 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 	WIFI_Send_Command("AT+CWLAP\r\n", 0);
 
 	char answer[500] = {0};
-	if ( WIFI_Read_Line(answer, 100, 8000000) == 1 ){
+	if ( WIFI_Read_Line(answer, 100, 10000) == 1 ){
 		return 1;
 	}
 
@@ -573,9 +697,9 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 
 	int readed_count=MAX_POINTS_COUNT;
 	while( (readed_count--) > 0){
-		if ( WIFI_Read_Line(answer, 100, 8000000) == 1 ){
+		if ( WIFI_Read_Line(answer, 100, 1000) == 1 ){
 			Log_Message("Points retrieve loop went too long");
-			return 1;
+			return 0;
 		}
 
 		if( strncmp(answer, "OK", 2) == 0 ) {
@@ -590,8 +714,8 @@ int WIFI_Retreive_List(WIFI_List_Result* result){
 			}
 
 			if ( WIFI_Parse_Point_Answer(answer, point) == 0 ){
-				Log_Message("Parsed ok");
-				Log_Message(point->name);
+				Log_Message_FAST("Parsed ok");
+				Log_Message_FAST(point->name);
 				result->points[result->found++] = point;
 			}else{
 				free_c(point);
@@ -617,33 +741,42 @@ int WIFI_Resolve_DNS(char* host, char* ipaddr){
 	return 0;
 }
 
-int WIFI_TCP_Connect(char* host, int port) {
+int WIFI_TCP_Connect(char* host, unsigned int port) {
 	char answer[100] = {0};
-	char port_str[6] = {0};
-	itoa(port, port_str, 10);
-	Log_Message("TCP connect");
-	Log_Message(host);
-	Log_Message(port_str);
-
-	if ( WIFI_Set_CIPMUX(1) ) {
-		return 1;
-	}
+	char command[256] = {0};
 
 	// TODO resolve DNS
 	// AT+CIPSTART=0,\"TCP\",\"192.168.1.216\",7000\r\n
-	char command[100] ="AT+CIPSTART=0,\"TCP\",\"";
-	strcat(command, host);
-	strcat(command, "\",");
-	strcat(command, port_str);
-	strcat(command, "\r\n");
 
-	WIFI_Exec_Cmd_Get_Answer(command, answer); // TODO
-	WIFI_Read_Line(answer, 100, 200000);
-	if (strncmp(answer, "OK", 2) != 0) {
-		return 1;
+	sprintf(command, "AT+CIPSTART=\"TCP\",\"%s\",\"%d\"\r\n", host, port);
+	//AT+CIPMODE=1
+
+	int retry_estimated = 5;
+
+	step1:
+		WIFI_Exec_Cmd_Get_Answer(command, answer); // TODO
+		if (strncmp(answer, "\r\n", 2) == 0){
+			if (WIFI_Read_Line(answer, 100, 1000) != 0){
+				return 1;
+			}
+		}
+
+		if (strncmp(answer, "busy", 4) == 0){
+			if (retry_estimated-- <= 0){
+				Log_Message_FAST("Max retry estimated");
+				return 1;
+			}
+
+			Log_Message_FAST("Busy retrying");
+			sleepMs(100);
+			goto step1;
+		}
+
+	if (strncmp(answer, "OK", 2) == 0) {
+		return 0;
 	}
 
-	return 0;
+	return 1;
 }
 
 int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
@@ -652,87 +785,106 @@ int WIFI_TCP_Send(uint8_t conn_id, uint8_t* data, unsigned int bytes_count){
 		return 1;
 	}
 
-	if(open_connections[conn_id] == 0){
-		Log_Message("Connection already closed");
-		return 1;
-	}
+	//if(open_connections[conn_id] == 0){
+	//	Log_Message("Connection already closed");
+	//	return 1;
+	//}
 	char answer[100] = {0};
-	char command[20] = {0};
+	char command[32] = {0};
+
+	//WIFI_Exec_Cmd_Get_Answer("+++\r\n", answer);
 	sprintf(command, "AT+CIPSEND=%d,%d\r\n", conn_id, bytes_count);
 
-	int retry_remained = 3;
+	int retry_remained = 10;
 	is_welcome_byte = 0;
 	is_new_line = 0;
 
-	WIFI_Send_Command(command,0);
-
-	WIFI_Read_Line(answer, 100, 200000);
-	WIFI_Read_Line(answer, 100, 200000);
-
-#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer, 100, 800000);
-#endif
-
-	if (strncmp(answer, "\r\n", 2) != 0) {
-		WIFI_Read_Line(answer, 100, 200000);
-
-		if (strncmp(answer, "OK", 2) != 0) {
-			Log_Message("Not OK");
-			Log_Message(answer);
-			//return 1;
+	step1:
+		if (retry_remained <= 0){
+			Log_Message("Retry number of attempts ended (step1)");
+			return 1;
 		}
+
+		if (WIFI_Exec_Cmd_Get_Answer(command, answer) != 0 ){
+			Log_Message("Step1 timeout");
+			return 1;
+		}
+
+
+	if( strncmp(answer, "busy", 4) == 0 ){
+		Log_Message_FAST("Busy.. going to step1");
+		int n = 192000;
+		while(n--);
+		goto step1;
 	}
 
-	if( wait_welcome_byte(400000) != 0 ){
-		Log_Message("No welcome message");
-		//return 1;
-	}
 
-	WIFI_Send_Bytes(data, bytes_count, 0);
-	WIFI_Send_Command("\r\n", 0);
-
-	WIFI_Read_Line(answer, 100, 800000);  // /r/n
-
-#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer, 100, 800000);
-#endif
-
-	if( strncmp(&answer[1], "\r\n", 2) == 0 ){
-		WIFI_Read_Line(answer, 100, 800000);
-
-		if( strncmp(answer, "busy", 4) == 0 ){
-			while( (retry_remained--) > 0  ){
-				if (WIFI_Read_Line(answer, 100, 800000) != 0){
-					continue;
-				}
-
-				if( strncmp(answer, "Recv", 4) == 0 ){
-					return 0;
-				}
-
-				if (strncmp(answer, "\r\n", 2) == 0){
-					if (WIFI_Read_Line(answer, 100, 800000) == 0){
-						return 0;
-					}
-					//Recv 93 bytes\r\n
-
-				}
-
-				if (strncmp(answer, "SEND OK", 7) == 0){
-					return 0;
-				}
-			}
+	if(strncmp(answer, "\r\n", 2) == 0 ){
+		if (WIFI_Read_Line(answer, 100, 2000)){
+			return 1;
+		}
+		if( strncmp(answer, "ERROR", 5) == 0 ){
+			WIFI_Exec_Cmd_Get_Answer("+++\r\n", answer);
+			Log_Message("ERROR answer");
 			return 1;
 		}
 	}
 
-	if (WIFI_Read_Line(answer, 100, 800000)){
+	if(strncmp(answer, "link is not valid", 17) == 0){
+		Log_Message("Link is not valid. Going to step1");
+		retry_remained--;
+		goto step1;
+	}
+
+	if (strncmp(answer, "OK", 2) != 0) {
+		WIFI_Exec_Cmd_Get_Answer("+++\r\n", answer);
+		Log_Message("Not OK");
 		return 1;
 	}
-	//Recv 93 bytes\r\n
 
-	if (WIFI_Read_Line(answer, 100, 800000)){
+
+	if( wait_welcome_byte(1000) != 0 ){
+		WIFI_Exec_Cmd_Get_Answer("+++\r\n", answer);
+		Log_Message("No welcome message");
 		return 1;
+	}
+
+	WIFI_Send_Bytes(data, bytes_count, 100);
+
+	WIFI_Exec_Cmd_Get_Answer("\r\n", answer);
+
+	retry_remained = 8;
+
+	if ( WIFI_Read_Line(answer, 100, 2000) ) {
+		Log_Message("Timeout");
+		return 1;
+	}
+
+	char validate[32] = {0};
+	sprintf(validate, "Recv %d bytes", bytes_count);
+	if ( strncmp(validate, answer, strlen(validate)) == 0){
+		return 0;
+	}
+
+	step2:
+		if (retry_remained <= 0){
+			Log_Message("Retry number of attempts ended");
+			return 1;
+		}
+		if (WIFI_Read_Line(answer, 100, 1000)){
+			Log_Message("Validate timeout");
+			return 1;
+		}
+
+	if( strncmp("busy", answer, 4) == 0 ){
+		Log_Message_FAST("Busy.. going to step1 (from step2)");
+		for(int n=10000;n>0;n--){}
+		goto step1;
+	}
+
+	if ( strncmp(validate, answer, strlen(validate)) != 0){
+		retry_remained--;
+		goto step2;
 	}
 
 	return 0;
@@ -745,15 +897,15 @@ int WIFI_TCP_Disconnect(uint8_t conn_id){
 
 	WIFI_Send_Command(command, 0);
 
-	if (WIFI_Read_Line(answer, 100, 400000)  ){
+	if ( WIFI_Read_Line(answer, 100, 100) ){
 		return 1;
 	}
 
-#ifndef  ESP_DISABLE_ECHO
-	if (WIFI_Read_Line(answer, 100, 400000)  ){
-		return 1;
-	}
-#endif
+	#ifndef  ESP_DISABLE_ECHO
+		if (WIFI_Read_Line(answer, 100, 100)  ){
+			return 1;
+		}
+	#endif
 
 	if( strncmp(answer, "link is not", 11) == 0 ){
 		return 2;
@@ -772,56 +924,47 @@ int WIFI_TCP_Disconnect(uint8_t conn_id){
 int WIFI_Set_CIPSERVER(int mode, int port){
 	char answer[100];
 	char command[30] = {0};
-	sprintf(command, "AT+CIPSERVER=%d", mode);
 
-	if( mode == 1 ){
-		strcat(command, ",");
-		itoa(port, &command[strlen(command)], 10);
+	if( mode == 1 ) {
+		sprintf(command, "AT+CIPSERVER=%d,%d\r\n", mode, port);
+	} else {
+		sprintf(command, "AT+CIPSERVER=%d\r\n", mode);
 	}
-	strcat(command, "\r\n");
 
-	WIFI_Send_Command(command, 0);
-	WIFI_Read_Line(answer, 100, 200000);
+	WIFI_Exec_Cmd_Get_Answer(command, answer);
 
-//#ifndef ESP_DISABLE_ECHO
-	WIFI_Read_Line(answer, 100, 200000); // WIFI CONNECTED
-//#endif
-
-	if (mode ==0 ){
+	if ( mode == 0 ){
 		if (strncmp(answer, "ERROR", 5) == 0) {
 			return 0; // already closed // TODO
 		}
+
 		if (strncmp(answer, "OK", 2) == 0) {
 			return 0;
 		}
 
 		if( strncmp(answer, "\r\n", 2) == 0 ){
-			WIFI_Read_Line(answer, 100, 200000);
+			WIFI_Read_Line(answer, 100, 1000);
 			return 0;
 		}
 
-		if ( WIFI_Read_Line(answer, 100, 200000) ){
+		if ( WIFI_Read_Line(answer, 100, 1000) ){
 			return 1;
 		}
-
-
 
 		if (strncmp(answer, "OK", 2) != 0) {
 			return 1;
 		}
 	}else{
 		if (strncmp(answer, "no change", 9) == 0) {
-			WIFI_Read_Line(answer, 100, 200000); // \r\n
+			WIFI_Read_Line(answer, 100, 1000); // \r\n
 		}
 
-		//WIFI_Read_Line(answer, 100, 200000);
 		if (strncmp(answer, "OK", 2) != 0) {
 			return 1;
 		}
 	}
 
 	return 0;
-
 }
 
 
@@ -834,11 +977,18 @@ int WIFI_ATE(uint8_t mode){
 		return 1;
 	}
 
-	if( strncmp(answer, "\r\n", 2) == 0){
-		if (WIFI_Read_Line(answer, 100, 800000) != 0 ){
+	if ( strncmp(answer, "ATE0\r\r\n", 7) == 0) { // if echo enabled
+		if (WIFI_Read_Line(answer, 100, 3000) != 0 ){
 			return 1;
 		}
 	}
+
+	if( strncmp(answer, "\r\n", 2) == 0){
+		if (WIFI_Read_Line(answer, 100, 3000) != 0 ){
+			return 1;
+		}
+	}
+
 
 	if (strncmp(answer, "OK", 2) != 0){
 		return 1;
@@ -853,31 +1003,44 @@ int WIFI_ATE(uint8_t mode){
 	return 0;
 }
 
-void WIFI_Init(){
-	MY_USART_Init();
-	sleepMs(2000);
+int WIFI_Init(){
+	newline_queue_empty();
 
 	if( WIFI_Reset() != 0 ){
 		Log_Message("Reset failed");
+		return 1;
 	}
-	sleepMs(2000);
 
+	#ifdef ESP_DISABLE_ECHO
 	if (WIFI_ATE(0) != 0) {
 		Log_Message("Failed to disable echo");
-		// FIXME ?? RESET
+		return 1;
 	}
+	#endif
 
-	if ( WIFI_Test() == 0) {
+	int wifi_test_reminds = 3;
+	wifi_test:
+		if ((wifi_test_reminds--) <= 0 ){
+			Log_Message("Wifi test failed");
+			return 1;
+		}
+
+		if ( WIFI_Test() != 0) {
+			Log_Message("Wifi test failed. Retrying");
+			goto wifi_test;
+		}
+
+	init_cwmode:
 		Log_Message("Wifi test ok");
-		if(WIFI_Set_CWMODE(3) == 0){
-			Log_Message("WIFI_Set_CWMODE ok");
-			wifi_init_ok = 1;
+		if(WIFI_Set_CWMODE(3) != 0){
+			Log_Message_FAST("WIFI_Set_CWMODE err");
+			return 1;
 		}
 
-		if(WIFI_Power(82) == 0){
-			Log_Message("Set RX TX power ok");
+		if(WIFI_Power(82) != 0){
+			Log_Message_FAST("Set RX TX power err");
+			return 1;
 		}
-	}else{
-		Log_Message("Wifi test failed");
-	}
+
+	return 0;
 }
