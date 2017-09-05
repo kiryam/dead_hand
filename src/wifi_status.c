@@ -1,6 +1,8 @@
 #include "wifi_status.h"
 #include "menu_wifi.h"
 #include "server.h"
+#include "umm_malloc_cfg.h"
+#include "stdio.h"
 
 static char ip[IP_MAX_LEN] = {0};
 static char sta_ip[IP_MAX_LEN] = {0};
@@ -48,7 +50,7 @@ void render_wifi_status(){
 
 	SSD1306_GotoXY(0,50);
 	char memory_str[40] = {0};
-	sprintf(memory_str, "Memory used: %d", get_memory_allocated_total());
+	sprintf(memory_str, "Memory free: %d", umm_free_heap_size());
 	SSD1306_Puts(memory_str, &Font_7x10, SSD1306_COLOR_WHITE);
 
 	SSD1306_UpdateScreen();

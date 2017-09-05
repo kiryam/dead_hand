@@ -1,2 +1,2 @@
-buildTools.path=/usr/local/Cellar/gcc-arm-none-eabi/20160928/bin
+buildTools.path=/usr/local/bin
 eclipse.preferences.version=1

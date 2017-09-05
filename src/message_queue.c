@@ -90,3 +90,12 @@ char* newline_queue_get() {
 	return out;
 }
 
+void newline_queue_empty(){
+	for(int i=0; i<NEWLINE_BUFFER_SIZE;i++ ){
+		if(newline_queue.queue[i] != NULL){
+			free_c(newline_queue.queue[i]);
+			newline_queue.queue[i] = NULL;
+		}
+	}
+	newline_queue.front = newline_queue.tail = 0;
+}

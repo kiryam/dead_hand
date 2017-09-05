@@ -266,26 +266,29 @@ int main(int argc, char* argv[]) {
 	Forth_Init();
 	#endif
 
-	Display_Init();
-	Log_Message_FAST("Display ok");
-
-	RenderTimer_Init();
-
 	MY_USART_Init();
 
 	while ( wifi_init_ok == 0) {
 		if ( WIFI_Init() !=0 ) {
-			Log_Message_FAST("Wifi init error retrying ");
+			Log_Message("Wifi init error retrying ");
+			sleepMs(2000);
 			continue;
 		}
 		wifi_init_ok = 1;
 	}
+	Log_Message("Wifi init ok");
 
 	if ( WIFI_Server_Start(SERVER_PORT) == 0 ) {
 		Log_Message_FAST("Server start ok");
 	}else{
 		Log_Message("Failed to start server");
 	}
+
+	Display_Init();
+	Log_Message_FAST("Display ok");
+
+	RenderTimer_Init();
+
 
 	RELAY_Init();
 	Log_Message_FAST("Relay ok");

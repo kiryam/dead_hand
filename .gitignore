@@ -2,3 +2,4 @@ Debug/*
 .settings/*
 
 .DS_Store
+/Debug/

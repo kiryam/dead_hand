@@ -6,7 +6,7 @@
 #ifdef USE_UMM_MALLOC
 #include "umm_malloc.h"
 #include "umm_malloc_cfg.h"
-char umm_heap_pool[POOL_SIZE];
+char umm_heap_pool[UMM_MALLOC_CFG_HEAP_SIZE];
 #endif
 
 
@@ -132,7 +132,7 @@ void free_c(_PTR p) {
 
 int get_memory_max(){
 #ifdef USE_UMM_MALLOC
-	return POOL_SIZE;
+	return UMM_MALLOC_CFG_HEAP_SIZE;
 #endif
 #ifdef USE_TLSF
 	return get_max_size(pool);
@@ -142,7 +142,7 @@ int get_memory_max(){
 // sum off all memory allocated
 int get_memory_allocated_total(){
 #ifdef USE_UMM_MALLOC
-	return get_memory_max()-umm_free_heap_size();
+	return get_memory_max()-umm_free_heap_size(); // fixme
 #endif
 #ifdef USE_TLSF
 	return get_used_size(pool);

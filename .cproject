@@ -54,10 +54,10 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor.1247322313" name="Use preprocessor" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.usepreprocessor" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.include.paths.1143326994" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.include.paths" useByScannerDiscovery="true" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/resources}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/cmsis}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/stm32f2-stdperiph}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/stm32f2-stdperiph}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/cmsis}&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.defs.503716792" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.assembler.defs" useByScannerDiscovery="true" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="USE_FULL_ASSERT"/>
@@ -71,14 +71,13 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.380493223" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.1076455925" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/resources}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/cmsis}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/stm32f2-stdperiph}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/cmsis}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/stm32f2-stdperiph}&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs.1365703685" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="USE_FULL_ASSERT"/>
-									<listOptionValue builtIn="false" value="TRACE"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="STM32F2XX"/>
 									<listOptionValue builtIn="false" value="USE_STDPERIPH_DRIVER"/>
@@ -91,10 +90,10 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler.161309670" name="Cross ARM C++ Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.cpp.compiler">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths.617804966" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.include.paths" useByScannerDiscovery="false" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/resources}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/cmsis}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/stm32f2-stdperiph}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/cmsis}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/stm32f2-stdperiph}&quot;"/>
 								</option>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions.1902389428" name="Do not use exceptions (-fno-exceptions)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.noexceptions" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti.1573426182" name="Do not use RTTI (-fno-rtti)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nortti" useByScannerDiscovery="true" value="true" valueType="boolean"/>
@@ -102,7 +101,6 @@
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nothreadsafestatics.210323845" name="Do not use thread-safe statics (-fno-threadsafe-statics)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.nothreadsafestatics" useByScannerDiscovery="true" value="true" valueType="boolean"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs.1217745995" name="Defined symbols (-D)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.cpp.compiler.defs" useByScannerDiscovery="false" valueType="definedSymbols">
 									<listOptionValue builtIn="false" value="USE_FULL_ASSERT"/>
-									<listOptionValue builtIn="false" value="TRACE"/>
 									<listOptionValue builtIn="false" value="DEBUG"/>
 									<listOptionValue builtIn="false" value="STM32F2XX"/>
 									<listOptionValue builtIn="false" value="USE_STDPERIPH_DRIVER"/>
@@ -158,7 +156,7 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize.2051733659" name="Cross ARM GNU Print Size" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.printsize">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.format.2398795" name="Size format" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.format" useByScannerDiscovery="false"/>
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.hex.1357993078" name="Hex" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.hex" useByScannerDiscovery="false" value="false" valueType="boolean"/>
-								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.totals.432712398" name="Show totals" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.totals" useByScannerDiscovery="false" value="false" valueType="boolean"/>
+								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.totals.432712398" name="Show totals" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.printsize.totals" useByScannerDiscovery="false" value="true" valueType="boolean"/>
 							</tool>
 						</toolChain>
 					</folderInfo>
@@ -198,10 +196,10 @@
 							<tool id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.526475924" name="Cross ARM C Compiler" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.380493223">
 								<option id="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths.417629783" name="Include paths (-I)" superClass="ilg.gnuarmeclipse.managedbuild.cross.option.c.compiler.include.paths" valueType="includePath">
 									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/${ProjName}/resources}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/cmsis}&quot;"/>
-									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/death_hand_f2/system/include/stm32f2-stdperiph}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/cmsis}&quot;"/>
+									<listOptionValue builtIn="false" value="&quot;${workspace_loc:/dead_hand/system/include/stm32f2-stdperiph}&quot;"/>
 								</option>
 								<inputType id="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input.1318287448" superClass="ilg.gnuarmeclipse.managedbuild.cross.tool.c.compiler.input"/>
 							</tool>

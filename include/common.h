@@ -21,7 +21,8 @@ enum MENU_LAYOUT {EMPTY, LIST};
 
 
 #define FORTH_ENABLED
-#define POOL_SIZE 1024 * 20
+#define UMM_MALLOC_CFG_HEAP_SIZE 1024 * 16
+
 
 #define USE_UMM_MALLOC
 //#define USE_TLSF
